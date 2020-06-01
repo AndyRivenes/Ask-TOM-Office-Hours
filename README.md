@@ -2,6 +2,7 @@
 
 These are scripts the have been used in the Database In-Memory Ask TOM Office Hours sessions
 
+Ask TOM Office Hours - RAC: How Population and Queries Work - 5/27/20:
 ```
 im_attributes.sql - Shows inmemory and other table attributes from user_tables
 imcu_seg.sql - Shows details of objects populated in the IM column store
