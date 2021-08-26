@@ -18,3 +18,18 @@ aimtasks.sql - Display AIM tasks
 aimtaskdetails.sql - Display details of sub-tasks run for a task_id (see aimtasks.sql)
 aimseg.sql - Script to select count(*) from a table to "heat up" AIM access statistics
 ```
+
+Ask TOM Office Hours - In-Memory Vectorized Joins - 08/26/2021:
+```
+01-join_cust-vect.sql - Display hash join with IM vectorized joins enabled
+02-join_cust-novects.sql - Display hash join with IM vectorized joins disabled
+03-join_cust-sysstats.sql - Display hash joins 01 and 02 using v$sysstats to show IM simd statistics
+04-join_group.sql - Create and populate a join group to show use with IM vectorized joins
+05-sqlmon_vect.sql - SQL Monitor active report for query 01
+06-sqlmon_novect.sql - SQL Monitor active report for query 02
+07-join_cust_jg-sysstats.sql - Display hash joins 01 and 02 using v$sysstats with join group
+08-sqlmon_vect_jg.sql - SQL Monitor active report for query 01 with join group
+09-sqlmon_novect_jg.sql - SQL Monitor active report for query 01 with join group
+10-cust_filter.sql - Display hash join with Bloom filter and IM vectorized joins
+11-cust_filter-sysstats.sql - Display hash join with Bloom filter and IM vectorized joins enabled and disabled with v$sysstats
+```
