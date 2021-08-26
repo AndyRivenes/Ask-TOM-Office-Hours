@@ -35,6 +35,8 @@ Ask TOM Office Hours - In-Memory Vectorized Joins - 08/26/2021:
   and disabled with v$sysstats
 ```
 Run Stats Utilities (source: Tom Kyte)
+```
 runstats.sql - The original runstats utility with modifications made with Tom's approval
 run_sysstats.sql - Modified version of runstats that uses v$sysstat to get around a 21c issue 
   with v@mystat. Used in the IM Vectorized Joins Office Hours session.
+```
