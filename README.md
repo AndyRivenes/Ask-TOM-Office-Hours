@@ -31,5 +31,10 @@ Ask TOM Office Hours - In-Memory Vectorized Joins - 08/26/2021:
 08-sqlmon_vect_jg.sql - SQL Monitor active report for query 01 with join group
 09-sqlmon_novect_jg.sql - SQL Monitor active report for query 01 with join group
 10-cust_filter.sql - Display hash join with Bloom filter and IM vectorized joins
-11-cust_filter-sysstats.sql - Display hash join with Bloom filter and IM vectorized joins enabled and disabled with v$sysstats
+11-cust_filter-sysstats.sql - Display hash join with Bloom filter and IM vectorized joins enabled 
+  and disabled with v$sysstats
 ```
+Run Stats Utilities (source: Tom Kyte)
+runstats.sql - The original runstats utility with modifications made with Tom's approval
+run_sysstats.sql - Modified version of runstats that uses v$sysstat to get around a 21c issue 
+  with v@mystat. Used in the IM Vectorized Joins Office Hours session.
