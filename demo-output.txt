@@ -1,0 +1,747 @@
+[oracle@localhost scripts]$ sqlplus ssb/ssb
+
+SQL*Plus: Release 21.0.0.0.0 - Production on Thu Nov 18 08:06:51 2021
+Version 21.3.0.0.0
+
+Copyright (c) 1982, 2021, Oracle.  All rights reserved.
+
+Last Successful login time: Thu Nov 18 2021 07:31:32 -08:00
+
+Connected to:
+Oracle Database 21c Enterprise Edition Release 21.0.0.0.0 - Production
+Version 21.3.0.0.0
+
+SQL> @03_im_populated.sql
+Connected.
+SQL> 
+SQL> -- Query the view v$IM_SEGMENTS to shows what objects are in the column store
+SQL> -- and how much of the objects were populated. When the BYTES_NOT_POPULATED is 0
+SQL> -- it indicates the entire table was populated.
+SQL> 
+SQL> SELECT
+  2    v.owner, v.segment_name name, v.populate_status status, v.bytes,
+  3    v.inmemory_size, v.bytes_not_populated
+  4  FROM   v$im_segments v;
+
+                                                                           In-Memory            Bytes
+OWNER           NAME                 STATUS               Disk Size             Size    Not Populated
+--------------- -------------------- ------------- ---------------- ---------------- ----------------
+SSB             LINEORDER            COMPLETED        3,693,232,128    1,860,173,824                0
+SSB             CUSTOMER             COMPLETED           24,862,720       28,442,624                0
+SSB             DATE_DIM             COMPLETED              122,880        1,179,648                0
+CHICAGO         CHICAGO_DATA         COMPLETED        1,739,448,320      312,999,936                0
+SSB             CITY_POINTS          COMPLETED               40,960        2,228,224                0
+SSB             PART                 COMPLETED           56,721,408       16,973,824                0
+SSB             SUPPLIER             COMPLETED            1,761,280        2,228,224                0
+
+7 rows selected.
+
+SQL> 
+SQL> set echo off
+SQL> @05_im_usage.sql
+Connected.
+SQL> column pool format a10;
+SQL> column alloc_bytes format 999,999,999,999,999
+SQL> column used_bytes format 999,999,999,999,999
+SQL> column populate_status format a15;
+SQL> column con_id format 999999;
+SQL> 
+SQL> -- Show total column store usage
+SQL> 
+SQL> SELECT *
+  2  FROM   v$inmemory_area;
+
+POOL                ALLOC_BYTES           USED_BYTES POPULATE_STATUS  CON_ID
+---------- -------------------- -------------------- --------------- -------
+1MB POOL          3,017,801,728        2,230,321,152 DONE                  3
+64KB POOL           318,767,104            8,978,432 DONE                  3
+
+SQL> 
+SQL> set echo off
+SQL> @04_ime_usage.sql
+SQL> @../imlogin.sql
+SQL> connect ssb/ssb@dbimpdb
+Connected.
+SQL> 
+SQL> set pages 9999
+SQL> set lines 150
+SQL> 
+SQL> set echo on
+SQL> 
+SQL> -- This query displays IMEUs populated in the IM Column Store
+SQL> 
+SQL> set echo off
+
+                                Partition            Column            Total         Used
+Owner      Object               Name                 Name              IMEUs    Space(MB)
+---------- -------------------- -------------------- --------------- ------- ------------
+SSB        LINEORDER                                 V1                  111          285
+
+SQL> 
+SQL> --
+SQL> -- Statement used to create the In-Memory Expression
+SQL> --
+SQL> -- alter table lineorder add v1 invisible as (lo_ordtotalprice - (lo_ordtotalprice*(lo_discount/100)) + lo_tax);
+SQL> --
+SQL> 
+SQL> @00_buffer-query.sql
+SQL> @../imlogin.sql
+SQL> connect ssb/ssb@dbimpdb
+Connected.
+SQL> 
+SQL> alter session set inmemory_query = disable;
+
+Session altered.
+
+SQL> 
+SQL> set pages 9999
+SQL> set lines 100
+SQL> 
+SQL> set timing on
+SQL> set numwidth 20
+SQL> set echo on
+SQL> 
+SQL> select lo_shipmode, sum(lo_ordtotalprice),
+  2         sum(lo_ordtotalprice - (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price
+  3  from   LINEORDER
+  4  group by
+  5    lo_shipmode;
+
+LO_SHIPMOD SUM(LO_ORDTOTALPRICE)       DISCOUNT_PRICE
+---------- --------------------- --------------------
+TRUCK            161820421065658   153761833420584.79
+MAIL             161844311638291   153787676162546.37
+REG AIR          161864992173671   153805526566678.06
+AIR              161811429297122   153751580704864.92
+FOB              161837922547928   153778178139883.79
+RAIL             161896622020617   153838322879643.73
+SHIP             161872168268007   153814810364218.27
+
+7 rows selected.
+
+Elapsed: 00:00:20.19
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  0cfvjbxsd3213, child number 0
+-------------------------------------
+select lo_shipmode, sum(lo_ordtotalprice),        sum(lo_ordtotalprice
+- (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price from
+LINEORDER group by   lo_shipmode
+
+Plan hash value: 3675673598
+
+--------------------------------------------------------------------------------
+| Id  | Operation          | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |           |       |       |   124K(100)|          |
+|   1 |  HASH GROUP BY     |           |     7 |   168 |   124K  (3)| 00:00:05 |
+|   2 |   TABLE ACCESS FULL| LINEORDER |    59M|  1372M|   123K  (1)| 00:00:05 |
+--------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                           2060
+IM scan segments disk                                                 1
+physical reads                                                       71
+session logical reads                                            458388
+session pga memory                                             27396344
+
+SQL> @00_buffer-query.sql
+Connected.
+
+Session altered.
+
+SQL> 
+SQL> select lo_shipmode, sum(lo_ordtotalprice),
+  2         sum(lo_ordtotalprice - (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price
+  3  from   LINEORDER
+  4  group by
+  5    lo_shipmode;
+
+LO_SHIPMOD SUM(LO_ORDTOTALPRICE)       DISCOUNT_PRICE
+---------- --------------------- --------------------
+TRUCK            161820421065658   153761833420584.79
+MAIL             161844311638291   153787676162546.37
+REG AIR          161864992173671   153805526566678.06
+AIR              161811429297122   153751580704864.92
+FOB              161837922547928   153778178139883.79
+RAIL             161896622020617   153838322879643.73
+SHIP             161872168268007   153814810364218.27
+
+7 rows selected.
+
+Elapsed: 00:00:20.79
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  0cfvjbxsd3213, child number 0
+-------------------------------------
+select lo_shipmode, sum(lo_ordtotalprice),        sum(lo_ordtotalprice
+- (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price from
+LINEORDER group by   lo_shipmode
+
+Plan hash value: 3675673598
+
+--------------------------------------------------------------------------------
+| Id  | Operation          | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |           |       |       |   124K(100)|          |
+|   1 |  HASH GROUP BY     |           |     7 |   168 |   124K  (3)| 00:00:05 |
+|   2 |   TABLE ACCESS FULL| LINEORDER |    59M|  1372M|   123K  (1)| 00:00:05 |
+--------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                           2082
+IM scan segments disk                                                 1
+session logical reads                                            451057
+session pga memory                                             26216696
+
+SQL> @01_no-ime.sql
+Connected.
+
+Session altered.
+
+SQL> 
+SQL> select lo_shipmode, sum(lo_ordtotalprice),
+  2         sum(lo_ordtotalprice - (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price
+  3  from   LINEORDER
+  4  group by
+  5    lo_shipmode;
+
+LO_SHIPMOD SUM(LO_ORDTOTALPRICE)       DISCOUNT_PRICE
+---------- --------------------- --------------------
+AIR              161811429297122   153751580704864.92
+FOB              161837922547928   153778178139883.79
+MAIL             161844311638291   153787676162546.37
+RAIL             161896622020617   153838322879643.73
+REG AIR          161864992173671   153805526566678.06
+SHIP             161872168268007   153814810364218.27
+TRUCK            161820421065658   153761833420584.79
+
+7 rows selected.
+
+Elapsed: 00:00:09.77
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  0cfvjbxsd3213, child number 1
+-------------------------------------
+select lo_shipmode, sum(lo_ordtotalprice),        sum(lo_ordtotalprice
+- (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price from
+LINEORDER group by   lo_shipmode
+
+Plan hash value: 3675673598
+
+-----------------------------------------------------------------------------------------
+| Id  | Operation                   | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |           |       |       |  5607 (100)|          |
+|   1 |  HASH GROUP BY              |           |     7 |   168 |  5607  (19)| 00:00:01 |
+|   2 |   TABLE ACCESS INMEMORY FULL| LINEORDER |    59M|  1372M|  5606  (19)| 00:00:01 |
+-----------------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                            984
+IM scan CUs columns accessed                                        444
+IM scan CUs memcompress for capacity high                           111
+IM scan rows                                                   59986052
+IM scan rows projected                                              777
+session logical reads                                            452159
+session logical reads - IM                                       450834
+session pga memory                                             26609912
+table scans (IM)                                                      1
+
+9 rows selected.
+
+SQL> @06_post-ime.sql
+Connected.
+SQL> set numwidth 20
+SQL> 
+SQL> -- In-Memory Expressions query
+SQL> 
+SQL> select lo_shipmode, sum(lo_ordtotalprice),
+  2         sum(lo_ordtotalprice - (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price
+  3  from   LINEORDER
+  4  group by
+  5    lo_shipmode;
+
+LO_SHIPMOD SUM(LO_ORDTOTALPRICE)       DISCOUNT_PRICE
+---------- --------------------- --------------------
+AIR              161811429297122   153751580704864.92
+FOB              161837922547928   153778178139883.79
+MAIL             161844311638291   153787676162546.37
+RAIL             161896622020617   153838322879643.73
+REG AIR          161864992173671   153805526566678.06
+SHIP             161872168268007   153814810364218.27
+TRUCK            161820421065658   153761833420584.79
+
+7 rows selected.
+
+Elapsed: 00:00:04.31
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  0cfvjbxsd3213, child number 1
+-------------------------------------
+select lo_shipmode, sum(lo_ordtotalprice),        sum(lo_ordtotalprice
+- (lo_ordtotalprice*(lo_discount/100)) + lo_tax) discount_price from
+LINEORDER group by   lo_shipmode
+
+Plan hash value: 3675673598
+
+-----------------------------------------------------------------------------------------
+| Id  | Operation                   | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |           |       |       |  5607 (100)|          |
+|   1 |  HASH GROUP BY              |           |     7 |   168 |  5607  (19)| 00:00:01 |
+|   2 |   TABLE ACCESS INMEMORY FULL| LINEORDER |    59M|  1372M|  5606  (19)| 00:00:01 |
+-----------------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                            436
+IM scan CUs columns accessed                                        444
+IM scan CUs memcompress for capacity high                           111
+IM scan EU rows                                                59986052
+IM scan EUs columns accessed                                        111
+IM scan EUs memcompress for capacity high                           111
+IM scan rows                                                   59986052
+IM scan rows projected                                              777
+session logical reads                                            451049
+session logical reads - IM                                       450834
+session pga memory                                             25889016
+table scans (IM)                                                      1
+
+12 rows selected.
+
+SQL> @im-json.sql
+Connected.
+
+alter table J_PURCHASEORDER inmemory
+exec dbms_inmemory.populate('SSB','J_PURCHASEORDER')
+
+Hit enter ...
+
+
+                Column
+TABLE_NAME      Name                                          DATA_DEFAULT
+--------------- --------------------------------------------- ---------------------------------------------------
+J_PURCHASEORDER ID
+J_PURCHASEORDER DATE_LOADED
+J_PURCHASEORDER PO_DOCUMENT
+J_PURCHASEORDER SYS_IME_OSON_8648A64C84684F67BFBBDD8421BB494A OSON("PO_DOCUMENT" FORMAT OSON , 'ime' RETURNING RA
+                                                              W(32767) NULL ON ERROR)
+
+
+Hit enter ...
+
+SQL> 
+SQL> SELECT COUNT(*)
+  2  FROM j_purchaseorder po
+  3  WHERE
+  4    json_exists(po.po_document,'$.ShippingInstructions?(@.Address.zipCode == 99236)')
+  5  /
+
+            COUNT(*)
+--------------------
+                4283
+
+Elapsed: 00:00:00.02
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------
+SQL_ID  fzc9474qxhkfn, child number 0
+-------------------------------------
+SELECT COUNT(*) FROM j_purchaseorder po WHERE
+json_exists(po.po_document,'$.ShippingInstructions?(@.Address.zipCode
+== 99236)')
+
+Plan hash value: 687789442
+
+-----------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name            | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                 |       |       |   376 (100)|          |
+|   1 |  SORT AGGREGATE             |                 |     1 | 20487 |            |          |
+|*  2 |   TABLE ACCESS INMEMORY FULL| J_PURCHASEORDER |  4615 |    90M|   376   (1)| 00:00:01 |
+-----------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - inmemory((JSON_EXISTS2("PO"."PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON ,
+              '$.ShippingInstructions?(@.Address.zipCode == 99236)' FALSE ON ERROR ,
+              OSON("PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON , 'ime' RETURNING RAW(32767) NULL
+              ON ERROR))=1 AND JSON_EXISTS2("PO"."PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON ,
+              '$.ShippingInstructions?(@.Address.zipCode == 99236)' FALSE ON ERROR)=1))
+       filter((JSON_EXISTS2("PO"."PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON ,
+              '$.ShippingInstructions?(@.Address.zipCode == 99236)' FALSE ON ERROR ,
+              OSON("PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON , 'ime' RETURNING RAW(32767) NULL
+              ON ERROR))=1 AND JSON_EXISTS2("PO"."PO_DOCUMENT" /*+ LOB_BY_VALUE */  FORMAT OSON ,
+              '$.ShippingInstructions?(@.Address.zipCode == 99236)' FALSE ON ERROR)=1))
+
+Note
+-----
+   - dynamic statistics used: dynamic sampling (level=2)
+
+
+34 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                              7
+IM scan CUs columns accessed                                          1
+IM scan CUs memcompress for query low                                 1
+IM scan EU rows                                                   10000
+IM scan EUs columns accessed                                          1
+IM scan EUs memcompress for query low                                 1
+IM scan rows                                                      10000
+IM scan rows projected                                             4283
+IM scan segments minmax eligible                                      1
+session logical reads                                              1509
+session logical reads - IM                                         1378
+session pga memory                                             25561336
+table scans (IM)                                                      1
+
+13 rows selected.
+
+SQL> @im-text.sql
+Connected.
+
+alter table chicago_data inmemory text (description)
+alter table chicago_data inmemory
+exec dbms_inmemory.populate('CHICAGO','CHICAGO_DATA')
+
+Hit enter ...
+
+
+             Column
+TABLE_NAME   Name                                          DATA_DEFAULT
+------------ --------------------------------------------- ---------------------------------------------------
+CHICAGO_DATA ID
+CHICAGO_DATA CASE_NUMBER
+CHICAGO_DATA C_DATE
+CHICAGO_DATA BLOCK
+CHICAGO_DATA IUCR
+CHICAGO_DATA PRIMARY_TYPE
+CHICAGO_DATA DESCRIPTION
+CHICAGO_DATA LOCATION_DESC
+CHICAGO_DATA ARREST
+CHICAGO_DATA DOMESTIC
+CHICAGO_DATA BEAT
+CHICAGO_DATA DISTRICT
+CHICAGO_DATA WARD
+CHICAGO_DATA COMMUNITY
+CHICAGO_DATA FBI_CODE
+CHICAGO_DATA X_COORD
+CHICAGO_DATA Y_COORD
+CHICAGO_DATA C_YEAR
+CHICAGO_DATA UPDATED_ON
+CHICAGO_DATA LATTITUDE
+CHICAGO_DATA LONGITUDE
+CHICAGO_DATA LOCATION
+CHICAGO_DATA SYS_IME_IVDX_8D0B6C4734154FFEBFA621566E6E3C1F SYS_CTX_MKIVIDX("DESCRIPTION" RETURNING RAW(32767))
+
+23 rows selected.
+
+Hit enter ...
+
+SQL> 
+SQL> select count(*)
+  2  from chicago_data
+  3  where district = '009'
+  4  and CONTAINS(description, 'BATTERY', 1) > 0
+  5  /
+
+            COUNT(*)
+--------------------
+               29099
+
+Elapsed: 00:00:00.19
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dkauj0j7njj4g, child number 0
+-------------------------------------
+select count(*) from chicago_data where district = '009' and
+CONTAINS(description, 'BATTERY', 1) > 0
+
+Plan hash value: 1069969652
+
+--------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name         | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |              |       |       |  2228 (100)|          |
+|   1 |  SORT AGGREGATE             |              |     1 |   127 |            |          |
+|*  2 |   TABLE ACCESS INMEMORY FULL| CHICAGO_DATA | 16930 |  2099K|  2228   (5)| 00:00:01 |
+--------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - inmemory(("DISTRICT"='009' AND SYS_CTX_CONTAINS2("DESCRIPTION" , 'BATTERY' ,
+              SYS_CTX_MKIVIDX("DESCRIPTION" RETURNING RAW(32767)))>0))
+       filter(("DISTRICT"='009' AND SYS_CTX_CONTAINS2("DESCRIPTION" , 'BATTERY' ,
+              SYS_CTX_MKIVIDX("DESCRIPTION" RETURNING RAW(32767)))>0))
+
+
+23 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             35
+IM scan CUs columns accessed                                          8
+IM scan CUs memcompress for capacity high                             4
+IM scan EU rows                                                 6821896
+IM scan EUs columns accessed                                          4
+IM scan EUs memcompress for capacity high                             4
+IM scan rows                                                    6821896
+IM scan rows projected                                            29099
+IM scan segments minmax eligible                                      4
+physical reads                                                       83
+session logical reads                                            214877
+session logical reads - IM                                       212335
+session pga memory                                             27396344
+table scans (IM)                                                      1
+
+14 rows selected.
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------
+SQL_ID  8ndx40px8aggc, child number 1
+-------------------------------------
+select   t1.name,   t2.value FROM   v$sysstat t1,   v$mystat t2 WHERE
+( t1.name IN (       'CPU used by this session',       'IM scan
+(dynamic) multi-threaded scans',       'IM scan (dynamic) rows',
+'IM scan EU rows',       'IM scan EUs columns accessed',       'IM scan
+rows',       'IM scan rows projected',       'IM scan segments minmax
+eligible',       'IM scan segments disk',       'IM scan CUs pruned',
+    'IM scan CUs columns accessed',       'physical reads',
+'session logical reads',       'session logical reads - IM',
+'session pga memory',       'table scans (IM)',       'table scan disk
+IMC fallback'     )     OR ( t1.name like 'IM scan CUs memcompress%' )
+   OR ( t1.name like 'IM scan EUs memcompress%' )     OR ( t1.name like
+'IM simd%' )   )   AND t1.statistic# = t2.statistic#   AND t2.value !=
+0 ORDER BY   t1.name
+
+Plan hash value: 834690521
+
+------------------------------------------------------------------------------------------------
+| Id  | Operation                 | Name               | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT          |                    |       |       |     1 (100)|          |
+|   1 |  SORT ORDER BY            |                    |    20 |  1300 |     1 (100)| 00:00:01 |
+|   2 |   NESTED LOOPS            |                    |    20 |  1300 |     0   (0)|          |
+|*  3 |    FIXED TABLE FULL       | X$KSUSGSTA         |    20 |   840 |     0   (0)|          |
+|*  4 |    FIXED TABLE FIXED INDEX| X$KSUMYSTA (ind:1) |     1 |    23 |     0   (0)|          |
+|*  5 |     FIXED TABLE FULL      | X$KSUSGIF          |     1 |     6 |     0   (0)|          |
+------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   3 - filter(((INTERNAL_FUNCTION("KSUSDNAM") OR "KSUSDNAM" LIKE 'IM scan CUs
+              memcompress%' OR "KSUSDNAM" LIKE 'IM scan EUs memcompress%' OR "KSUSDNAM" LIKE 'IM
+              simd%') AND INTERNAL_FUNCTION("CON_ID") AND "INST_ID"=USERENV('INSTANCE')))
+   4 - filter(("KSUSGSTN"="KSUSESTN" AND "KSUSESTV"<>0 AND INTERNAL_FUNCTION("CON_ID")
+              AND "INST_ID"=USERENV('INSTANCE') AND BITAND("KSSPAFLG",1)<>0 AND
+              BITAND("KSUSEFLG",1)<>0 AND "KSUSESTN"<))
+   5 - filter(("CON_ID"=0 OR "CON_ID"=3))
+
+
+40 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             39
+IM scan CUs columns accessed                                          8
+IM scan CUs memcompress for capacity high                             4
+IM scan EU rows                                                 6821896
+IM scan EUs columns accessed                                          4
+IM scan EUs memcompress for capacity high                             4
+IM scan rows                                                    6821896
+IM scan rows projected                                            29099
+IM scan segments minmax eligible                                      4
+physical reads                                                       83
+session logical reads                                            214996
+session logical reads - IM                                       212335
+session pga memory                                             27724024
+table scans (IM)                                                      1
+
+14 rows selected.
+
+SQL> @im-spatial.sql
+Connected.
+
+ALTER TABLE city_points INMEMORY PRIORITY high INMEMORY SPATIAL (shape)
+exec dbms_inmemory.populate('SSB','CITY_POINTS')
+
+Hit enter ...
+
+
+             Column
+TABLE_NAME   Name                                          DATA_DEFAULT
+------------ --------------------------------------------- ---------------------------------------------------
+CITY_POINTS  SHAPE
+CITY_POINTS  SYS_NC00011$
+CITY_POINTS  SYS_NC00012$
+CITY_POINTS  CITY_ID
+CITY_POINTS  CITY_NAME
+CITY_POINTS  LATITUDE
+CITY_POINTS  LONGITUDE
+CITY_POINTS  SYS_NC00006$
+CITY_POINTS  SYS_NC00007$
+CITY_POINTS  SYS_NC00008$
+CITY_POINTS  SYS_NC00009$
+CITY_POINTS  SYS_NC00010$
+CITY_POINTS  SYS_IME_SDO_F98FFA3406F54F17BF87B202E926D4F3  SDO_GEOM_MIN_X(SYS_OP_NOEXPAND("SHAPE"))
+CITY_POINTS  SYS_IME_SDO_668D20477C5F4F83BFCBADE760315A64  SDO_GEOM_MAX_X(SYS_OP_NOEXPAND("SHAPE"))
+CITY_POINTS  SYS_IME_SDO_1EBB341B22614F86BF401532F3AC0FE2  SDO_GEOM_MIN_Y(SYS_OP_NOEXPAND("SHAPE"))
+CITY_POINTS  SYS_IME_SDO_D480AC8427054FF3BF5881C2FBC6731A  SDO_GEOM_MAX_Y(SYS_OP_NOEXPAND("SHAPE"))
+CITY_POINTS  SYS_IME_SDO_81E624FE53FB4F86BFBC952894179386  SDO_GEOM_MIN_Z(SYS_OP_NOEXPAND("SHAPE"))
+CITY_POINTS  SYS_IME_SDO_AB2F4C1FCF834F53BFBEB66D9493E4FC  SDO_GEOM_MAX_Z(SYS_OP_NOEXPAND("SHAPE"))
+
+18 rows selected.
+
+Hit enter ...
+
+SQL> 
+SQL> SELECT city_name
+  2  FROM city_points c
+  3  where
+  4   sdo_filter(c.shape,
+  5              sdo_geometry(2001,8307,sdo_point_type(-122.453613,37.661791,null),null,null)
+  6             ) = 'TRUE';
+
+CITY_NAME
+-------------------------
+San Francisco
+
+Elapsed: 00:00:00.22
+SQL> 
+SQL> set echo off
+Hit enter ...
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------
+SQL_ID  6r9nkbvmyb8pb, child number 0
+-------------------------------------
+SELECT city_name FROM city_points c where  sdo_filter(c.shape,
+   sdo_geometry(2001,8307,sdo_point_type(-122.453613,37.661791,null),nul
+l,null)            ) = 'TRUE'
+
+Plan hash value: 3912797212
+
+------------------------------------------------------------------------------------------
+| Id  | Operation                  | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT           |             |       |       |    11 (100)|          |
+|*  1 |  TABLE ACCESS INMEMORY FULL| CITY_POINTS |     1 |  3849 |    11  (91)| 00:00:01 |
+------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter((SDO_GEOM_MAX_X("SHAPE")>=SDO_GEOM_MIN_X("MDSYS"."SDO_GEOMETRY"(2001
+              ,8307,"SDO_POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))-7.848052667402416
+              6E-008D AND SDO_GEOM_MIN_X("SHAPE")<=SDO_GEOM_MAX_X("MDSYS"."SDO_GEOMETRY"(2001,83
+              07,"SDO_POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))+7.8480526674024166E-
+              008D AND SDO_GEOM_MAX_Y("SHAPE")>=SDO_GEOM_MIN_Y("MDSYS"."SDO_GEOMETRY"(2001,8307,
+              "SDO_POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))-7.8480526674024166E-008
+              D AND SDO_GEOM_MIN_Y("SHAPE")<=SDO_GEOM_MAX_Y("MDSYS"."SDO_GEOMETRY"(2001,8307,"SD
+              O_POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))+7.8480526674024166E-008D
+              AND SDO_GEOM_MAX_Z("SHAPE")>=SDO_GEOM_MIN_Z("MDSYS"."SDO_GEOMETRY"(2001,8307,"SDO_
+              POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))-7.8480526674024166E-008D
+              AND SDO_GEOM_MIN_Z("SHAPE")<=SDO_GEOM_MAX_Z("MDSYS"."SDO_GEOMETRY"(2001,8307,"SDO_
+              POINT_TYPE"((-122.453613),37.661791,NULL),NULL,NULL))+7.8480526674024166E-008D))
+
+Note
+-----
+   - dynamic statistics used: dynamic sampling (level=2)
+
+
+35 rows selected.
+
+Hit enter ...
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             29
+IM scan CUs columns accessed                                          9
+IM scan CUs memcompress for query low                                 2
+IM scan EU rows                                                       4
+IM scan EUs columns accessed                                          6
+IM scan EUs memcompress for query low                                 1
+IM scan rows                                                          8
+IM scan rows projected                                                5
+IM scan segments minmax eligible                                      1
+physical reads                                                      170
+session logical reads                                              6165
+session logical reads - IM                                           10
+session pga memory                                             26413304
+table scans (IM)                                                      2
+
+14 rows selected.
+
+SQL> 
