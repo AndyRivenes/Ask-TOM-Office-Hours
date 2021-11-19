@@ -34,6 +34,13 @@ Ask TOM Office Hours - In-Memory Vectorized Joins - 08/26/2021:
 11-cust_filter-sysstats.sql - Display hash join with Bloom filter and IM vectorized joins enabled 
   and disabled with v$sysstats
 ```
+
+Ask TOM Office Hours - In-Memory Expressions Update - 11/18/2021:
+```
+Office-Hours-IME-Updates.pdf - In-Memory Expressions Update presentation
+demo-output.txt - Output from demo queries run during the session
+```
+
 Run Stats Utilities (source: Tom Kyte)
 ```
 runstats.sql - The original runstats utility with modifications made with Tom's approval
