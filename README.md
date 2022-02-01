@@ -54,6 +54,7 @@ OH-Ext-Tables-012622.pdf - presentation from the session
 asktom-ext-part-examples.txt - example SQL and results
 
 imseg.sql - display v$im_segments population info
+imext-stats.sql - display session level statistics
 imexternal.sql - runs external table query
 imextpart.sql - runs partition external table query
 imexthybrid.sql -runs hybrid external table query
