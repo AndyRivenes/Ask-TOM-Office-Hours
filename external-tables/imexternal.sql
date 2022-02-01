@@ -9,7 +9,7 @@ select nation, count(*) from EXT_CUST_HYBRID_PART group by nation;
 set echo off
 set timing off
 
-@xplan
+select * from table(dbms_xplan.display_cursor());
 
 @imext-stats.sql
 
