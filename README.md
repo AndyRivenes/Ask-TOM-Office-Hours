@@ -47,3 +47,14 @@ runstats.sql - The original runstats utility with modifications made with Tom's 
 run_sysstats.sql - Modified version of runstats that uses v$sysstat to get around a 21c issue 
   with v@mystat. Used in the IM Vectorized Joins Office Hours session.
 ```
+
+Ask TOM Office Hours - External Tables - 01/26/2022:
+```
+OH-Ext-Tables-012622.pdf - presentation from the session
+asktom-ext-part-examples.txt - example SQL and results
+
+imseg.sql - display v$im_segments population info
+imexternal.sql - runs external table query
+imextpart.sql - runs partition external table query
+imexthybrid.sql -runs hybrid external table query
+```
