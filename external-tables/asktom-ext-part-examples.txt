@@ -1,0 +1,649 @@
+create table ext_cust
+( custkey number, name varchar2(25), address varchar2(26), city varchar2(24), nation varchar2(19) )
+organization external
+( type oracle_loader
+  default directory ext_dir
+  access parameters (
+    records delimited by newline
+    fields terminated by '%'
+    missing field values are null
+    ( custkey, name, address, city, nation ) )
+  location ('ext_cust.csv') )
+reject limit unlimited;
+
+alter table ext_cust inmemory;
+
+exec dbms_inmemory.populate('SSB','EXT_CUST');
+
+SQL> @imseg
+
+                                                                                                 BYTES NOT
+SEGMENT_NAME         PARTITION_NAME  EXTERNAL            BYTES POP STATUS       INMEMORY_SIZE    POPULATED
+-------------------- --------------- -------- ---------------- ------------- ---------------- ------------
+EXT_CUST                             TRUE                    0 COMPLETED            1,179,648            0
+
+SQL> 
+
+
+ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+
+SQL> ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+
+Session altered.
+
+SQL> @imexternal
+SQL> 
+SQL> select nation, count(*) from EXT_CUST group by nation;
+
+NATION                COUNT(*)
+------------------- ----------
+ALGERIA                   2360
+CHINA                     2427
+JAPAN                     2413
+RUSSIA                    2463
+VIETNAM                   2344
+
+Elapsed: 00:00:00.10
+SQL> 
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  9f0fw4v3f7fz2, child number 0
+-------------------------------------
+select nation, count(*) from EXT_CUST group by nation
+
+Plan hash value: 323550240
+
+-------------------------------------------------------------------------------------------------
+| Id  | Operation                            | Name     | Rows  | Bytes | Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                     |          |       |       |    30 (100)|          |
+|   1 |  HASH GROUP BY                       |          |     5 |    80 |    30   (4)| 00:00:01 |
+|   2 |   EXTERNAL TABLE ACCESS INMEMORY FULL| EXT_CUST | 12007 |   187K|    29   (0)| 00:00:01 |
+-------------------------------------------------------------------------------------------------
+
+
+14 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             62
+IM scan CUs columns accessed                                          1
+IM scan CUs memcompress for query low                                 1
+IM scan rows                                                      12007
+IM scan rows projected                                                5
+physical reads                                                        4
+session logical reads                                              4428
+session pga memory                                             22595152
+table scans (IM)                                                      1
+
+9 rows selected.
+
+SQL> 
+
+
+*************
+
+create table ext_cust_part
+(
+  custkey number,
+  name varchar2(25),
+  address varchar2(26),
+  city varchar2(24),
+  nation varchar2(19)
+)
+organization external
+(
+  type oracle_loader
+  default directory ext_dir
+  access parameters (
+    records delimited by newline
+    fields terminated by '%'
+    missing field values are null
+    (
+      custkey,
+      name,
+      address,
+      city,
+      nation
+    )
+  )
+)
+reject limit unlimited
+partition by list (nation)
+(
+  partition n1 values('RUSSIA')  location ('ext_cust_russia.csv'),
+  partition n2 values('JAPAN')   location ('ext_cust_japan.csv'),
+  partition n3 values('VIETNAM') location ('ext_cust_vietnam.csv'),
+  partition n4 values('ALGERIA') location ('ext_cust_algeria.csv'),
+  partition n5 values('CHINA')   location ('ext_cust_china.csv')
+);
+
+
+set lines 100
+col table_name format a20;
+col partition_name format a20;
+col high_value format a15;
+select TABLE_NAME, PARTITION_NAME, high_value, PARTITION_POSITION, INMEMORY
+from user_tab_partitions where table_name = 'EXT_CUST_PART';
+
+SQL> SQL> SQL> SQL>   2
+TABLE_NAME           PARTITION_NAME       HIGH_VALUE      PARTITION_POSITION INMEMORY
+-------------------- -------------------- --------------- ------------------ --------
+EXT_CUST_PART        N1                   'RUSSIA'                         1
+EXT_CUST_PART        N2                   'JAPAN'                          2
+EXT_CUST_PART        N3                   'VIETNAM'                        3
+EXT_CUST_PART        N4                   'ALGERIA'                        4
+EXT_CUST_PART        N5                   'CHINA'                          5
+
+SQL>
+
+connect ssb/ssb
+
+ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+
+alter table ext_cust_part inmemory;
+
+exec dbms_inmemory.populate('SSB','EXT_CUST_PART');
+
+@imseg
+
+SQL> @imseg
+
+                                                                                                 BYTES NOT
+SEGMENT_NAME         PARTITION_NAME  EXTERNAL            BYTES POP STATUS       INMEMORY_SIZE    POPULATED
+-------------------- --------------- -------- ---------------- ------------- ---------------- ------------
+EXT_CUST_PART        N5              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N2              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N3              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N1              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N4              TRUE                    0 COMPLETED            1,179,648            0
+
+SQL>
+
+
+set lines 100
+col table_name format a20;
+col partition_name format a20;
+col high_value format a15;
+select TABLE_NAME, PARTITION_NAME, high_value, PARTITION_POSITION, INMEMORY
+from user_tab_partitions where table_name = 'EXT_CUST_PART';
+
+SQL> SQL> SQL> SQL>   2
+
+TABLE_NAME           PARTITION_NAME       HIGH_VALUE      PARTITION_POSITION INMEMORY
+-------------------- -------------------- --------------- ------------------ --------
+EXT_CUST_PART        N1                   'RUSSIA'                         1
+EXT_CUST_PART        N2                   'JAPAN'                          2
+EXT_CUST_PART        N3                   'VIETNAM'                        3
+EXT_CUST_PART        N4                   'ALGERIA'                        4
+EXT_CUST_PART        N5                   'CHINA'                          5
+
+SQL>
+
+col table_name format a30;
+col partition_name format a20;
+col high_value format a10;
+--
+select
+  tp.TABLE_NAME,
+  tp.PARTITION_NAME,
+  tp.HIGH_VALUE,
+  tp.PARTITION_POSITION,
+  DECODE(tp.INMEMORY,null,xtp.INMEMORY,tp.INMEMORY) INMEMORY
+from
+  user_tab_partitions tp,
+  user_xternal_tab_partitions xtp
+where
+  tp.table_name = xtp.table_name(+)
+  and tp.partition_name = xtp.partition_name(+)
+  and tp.table_name = 'EXT_CUST_PART';
+
+SQL> SQL> SQL> SQL>   2    3    4    5    6    7    8    9   10   11   12   13
+TABLE_NAME                     PARTITION_NAME       HIGH_VALUE PARTITION_POSITION INMEMORY
+------------------------------ -------------------- ---------- ------------------ --------
+EXT_CUST_PART                  N1                   'RUSSIA'                    1 ENABLED
+EXT_CUST_PART                  N2                   'JAPAN'                     2 ENABLED
+EXT_CUST_PART                  N3                   'VIETNAM'                   3 ENABLED
+EXT_CUST_PART                  N4                   'ALGERIA'                   4 ENABLED
+EXT_CUST_PART                  N5                   'CHINA'                     5 ENABLED
+
+SQL>
+
+
+SQL> @imextpart.sql
+SQL>
+SQL> select nation, count(*) from EXT_CUST_PART group by nation;
+
+NATION                          COUNT(*)
+------------------- --------------------
+RUSSIA                              2463
+JAPAN                               2413
+VIETNAM                             2344
+ALGERIA                             2360
+CHINA                               2427
+
+Elapsed: 00:00:00.34
+SQL>
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  3zwzg6fyrx2zc, child number 0
+-------------------------------------
+select nation, count(*) from EXT_CUST_PART group by nation
+
+Plan hash value: 346892626
+
+-----------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                             | Name          | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+-----------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |               |       |       |    30 (100)|          |       |       |
+|   1 |  PARTITION LIST ALL                   |               |     5 |    80 |    30   (4)| 00:00:01 |     1 |     5 |
+|   2 |   HASH GROUP BY                       |               |     5 |    80 |    30   (4)| 00:00:01 |       |       |
+|   3 |    EXTERNAL TABLE ACCESS INMEMORY FULL| EXT_CUST_PART | 12007 |   187K|    29   (0)| 00:00:01 |     1 |     5 |
+-----------------------------------------------------------------------------------------------------------------------
+
+
+15 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             38
+IM scan CUs columns accessed                                          5
+IM scan CUs memcompress for query low                                 5
+IM scan rows                                                      12007
+IM scan rows projected                                                5
+session logical reads                                              3675
+session pga memory                                             19007736
+table scans (IM)                                                      5
+
+8 rows selected.
+
+SQL>
+
+
+SQL> @imseg
+
+                                                                                                 BYTES NOT
+SEGMENT_NAME         PARTITION_NAME  EXTERNAL            BYTES POP STATUS       INMEMORY_SIZE    POPULATED
+-------------------- --------------- -------- ---------------- ------------- ---------------- ------------
+EXT_CUST_PART        N5              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N2              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N3              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N1              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_PART        N4              TRUE                    0 COMPLETED            1,179,648            0
+
+SQL> alter table ext_cust_part no inmemory;
+
+Table altered.
+
+SQL> @imseg
+
+no rows selected
+
+SQL>
+
+***********
+
+create table ext_cust_hybrid_part
+(
+  custkey number,
+  name varchar2(25),
+  address varchar2(26),
+  city varchar2(24),
+  nation varchar2(19)
+)
+external partition attributes
+(
+  type oracle_loader
+  default directory ext_dir
+  access parameters (
+    records delimited by newline
+    fields terminated by '%'
+    missing field values are null
+    (
+      custkey,
+      name,
+      address,
+      city,
+      nation
+    )
+  )
+  reject limit unlimited
+)
+partition by list (nation)
+(
+  partition n1 values('RUSSIA')  external location ('ext_cust_russia.csv'),
+  partition n2 values('JAPAN')   external location ('ext_cust_japan.csv'),
+  partition n3 values('BULGARIA'),
+  partition n4 values('NORWAY')
+);
+
+set lines 100
+col table_name format a20;
+col partition_name format a20;
+col high_value format a15;
+select TABLE_NAME, PARTITION_NAME, high_value, PARTITION_POSITION, INMEMORY
+from user_tab_partitions where table_name = 'EXT_CUST_HYBRID_PART';
+
+SQL> SQL> SQL> SQL>   2
+
+TABLE_NAME           PARTITION_NAME       HIGH_VALUE        PARTITION_POSITION INMEMORY
+-------------------- -------------------- --------------- -------------------- --------
+EXT_CUST_HYBRID_PART N1                   'RUSSIA'                           1
+EXT_CUST_HYBRID_PART N2                   'JAPAN'                            2
+EXT_CUST_HYBRID_PART N3                   'BULGARIA'                         3 DISABLED
+EXT_CUST_HYBRID_PART N4                   'NORWAY'                           4 DISABLED
+
+SQL>
+
+
+col table_name format a30;
+col partition_name format a20;
+col high_value format a10;
+col USER_TAB_PARTITIONS format a19;
+col XTERNAL_TAB_PARTITIONS format a22;
+
+select
+  tp.TABLE_NAME,
+  tp.PARTITION_NAME,
+  tp.INMEMORY as "USER_TAB_PARTITIONS",
+  xtp.INMEMORY as "XTERNAL_TAB_PARTITIONS"
+from
+  user_tab_partitions tp,
+  user_xternal_tab_partitions xtp
+where
+  tp.table_name = xtp.table_name(+)
+  and tp.partition_name = xtp.partition_name(+)
+  and tp.table_name = 'EXT_CUST_HYBRID_PART';
+
+SQL> SQL> SQL> SQL> SQL> SQL>   2    3    4    5    6    7    8    9   10   11   12
+
+TABLE_NAME                     PARTITION_NAME       USER_TAB_PARTITIONS XTERNAL_TAB_PARTITIONS
+------------------------------ -------------------- ------------------- ----------------------
+EXT_CUST_HYBRID_PART           N1                                       DISABLED
+EXT_CUST_HYBRID_PART           N2                                       DISABLED
+EXT_CUST_HYBRID_PART           N3                   DISABLED
+EXT_CUST_HYBRID_PART           N4                   DISABLED
+
+SQL>
+
+SQL> connect ssb/ssb
+Connected.
+SQL> ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+
+Session altered.
+
+SQL> @imexthybrid.sql
+SQL>
+SQL> select nation, count(*) from EXT_CUST_HYBRID_PART group by nation;
+
+NATION                          COUNT(*)
+------------------- --------------------
+RUSSIA                              2463
+JAPAN                               2413
+BULGARIA                            2360
+NORWAY                              2360
+
+Elapsed: 00:00:00.28
+SQL>
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  9xvzy9nw70fh0, child number 0
+-------------------------------------
+select nation, count(*) from EXT_CUST_HYBRID_PART group by nation
+
+Plan hash value: 3929300810
+
+------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                       | Name                 | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                |                      |       |       |    23 (100)|          |       |       |
+|   1 |  PARTITION LIST ALL             |                      |     4 |    52 |    23   (5)| 00:00:01 |     1 |     4 |
+|   2 |   HASH GROUP BY                 |                      |     4 |    52 |    23   (5)| 00:00:01 |       |       |
+|   3 |    TABLE ACCESS HYBRID PART FULL| EXT_CUST_HYBRID_PART |  9596 |   121K|    22   (0)| 00:00:01 |     1 |     4 |
+|   4 |     TABLE ACCESS FULL           | EXT_CUST_HYBRID_PART |       |       |            |          |     1 |     4 |
+------------------------------------------------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             37
+session logical reads                                              1674
+session pga memory                                             20646136
+
+SQL>
+
+connect ssb/ssb
+ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+alter table EXT_CUST_HYBRID_PART inmemory;
+exec dbms_inmemory.populate('SSB','EXT_CUST_HYBRID_PART');
+
+col table_name format a30;
+col partition_name format a20;
+col high_value format a10;
+--
+select
+  tp.TABLE_NAME,
+  tp.PARTITION_NAME,
+  tp.HIGH_VALUE,
+  tp.PARTITION_POSITION,
+  DECODE(tp.INMEMORY,null,xtp.INMEMORY,tp.INMEMORY) INMEMORY
+from
+  user_tab_partitions tp,
+  user_xternal_tab_partitions xtp
+where
+  tp.table_name = xtp.table_name(+)
+  and tp.partition_name = xtp.partition_name(+)
+  and tp.table_name = 'EXT_CUST_HYBRID_PART';
+
+SQL> SQL> SQL> SQL>   2    3    4    5    6    7    8    9   10   11   12   13
+TABLE_NAME                     PARTITION_NAME       HIGH_VALUE   PARTITION_POSITION INMEMORY
+------------------------------ -------------------- ---------- -------------------- --------
+EXT_CUST_HYBRID_PART           N1                   'RUSSIA'                      1 ENABLED
+EXT_CUST_HYBRID_PART           N2                   'JAPAN'                       2 ENABLED
+EXT_CUST_HYBRID_PART           N3                   'BULGARIA'                    3 ENABLED
+EXT_CUST_HYBRID_PART           N4                   'NORWAY'                      4 ENABLED
+
+SQL>
+
+select
+  tp.TABLE_NAME,
+  tp.PARTITION_NAME,
+  tp.INMEMORY as "USER_TAB_PARTITIONS",
+  xtp.INMEMORY as "XTERNAL_TAB_PARTITIONS"
+from
+  user_tab_partitions tp,
+  user_xternal_tab_partitions xtp
+where
+  tp.table_name = xtp.table_name(+)
+  and tp.partition_name = xtp.partition_name(+)
+  and tp.table_name = 'EXT_CUST_HYBRID_PART';
+
+
+TABLE_NAME                     PARTITION_NAME       USER_TAB_PARTITIONS XTERNAL_TAB_PARTITIONS
+------------------------------ -------------------- ------------------- ----------------------
+EXT_CUST_HYBRID_PART           N1                                       ENABLED
+EXT_CUST_HYBRID_PART           N2                                       ENABLED
+EXT_CUST_HYBRID_PART           N3                   ENABLED
+EXT_CUST_HYBRID_PART           N4                   ENABLED
+
+
+@imseg
+
+                                                                                                 BYTES NOT
+SEGMENT_NAME         PARTITION_NAME  EXTERNAL            BYTES POP STATUS       INMEMORY_SIZE    POPULATED
+-------------------- --------------- -------- ---------------- ------------- ---------------- ------------
+EXT_CUST_HYBRID_PART N1              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_HYBRID_PART N4              FALSE           8,241,152 COMPLETED            1,179,648            0
+EXT_CUST_HYBRID_PART N2              TRUE                    0 COMPLETED            1,179,648            0
+EXT_CUST_HYBRID_PART N3              FALSE           8,241,152 COMPLETED            1,179,648            0
+
+
+@imexthybrid.sql
+
+SQL> @imexthybrid.sql
+SQL>
+SQL> select nation, count(*) from EXT_CUST_HYBRID_PART group by nation;
+
+NATION                          COUNT(*)
+------------------- --------------------
+RUSSIA                              2463
+JAPAN                               2413
+BULGARIA                            2360
+NORWAY                              2360
+
+Elapsed: 00:00:00.16
+SQL>
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  9xvzy9nw70fh0, child number 0
+-------------------------------------
+select nation, count(*) from EXT_CUST_HYBRID_PART group by nation
+
+Plan hash value: 3929300810
+
+---------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                                | Name                 | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+---------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                         |                      |       |       |    15 (100)|          |       |       |
+|   1 |  PARTITION LIST ALL                      |                      |     4 |    52 |    15   (7)| 00:00:01 |     1 |     4 |
+|   2 |   HASH GROUP BY                          |                      |     4 |    52 |    15   (7)| 00:00:01 |       |       |
+|   3 |    TABLE ACCESS HYBRID PART INMEMORY FULL| EXT_CUST_HYBRID_PART |  9596 |   121K|    14   (0)| 00:00:01 |     1 |     4 |
+|   4 |     TABLE ACCESS INMEMORY FULL           | EXT_CUST_HYBRID_PART |       |       |            |          |     1 |     4 |
+---------------------------------------------------------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                            133
+IM scan CUs columns accessed                                          4
+IM scan CUs memcompress for query low                                 4
+IM scan rows                                                       9596
+IM scan rows projected                                                4
+IM scan segments minmax eligible                                      2
+session logical reads                                              7254
+session logical reads - IM                                         2012
+session pga memory                                             20383992
+table scans (IM)                                                      4
+
+10 rows selected.
+
+SQL>
+
+connect ssb/ssb
+ALTER SESSION SET QUERY_REWRITE_INTEGRITY=stale_tolerated;
+
+alter table EXT_CUST_HYBRID_PART no inmemory;
+alter table EXT_CUST_HYBRID_PART modify partition n1 inmemory;
+alter table EXT_CUST_HYBRID_PART modify partition n3 inmemory;
+exec dbms_inmemory.populate('SSB','EXT_CUST_HYBRID_PART','N1');
+exec dbms_inmemory.populate('SSB','EXT_CUST_HYBRID_PART','N3');
+
+
+col table_name format a30;
+col partition_name format a20;
+col high_value format a10;
+--
+select
+  tp.TABLE_NAME,
+  tp.PARTITION_NAME,
+  tp.HIGH_VALUE,
+  tp.PARTITION_POSITION,
+  DECODE(tp.INMEMORY,null,xtp.INMEMORY,tp.INMEMORY) INMEMORY
+from
+  user_tab_partitions tp,
+  user_xternal_tab_partitions xtp
+where
+  tp.table_name = xtp.table_name(+)
+  and tp.partition_name = xtp.partition_name(+)
+  and tp.table_name = 'EXT_CUST_HYBRID_PART';
+
+SQL> SQL> SQL> SQL>   2    3    4    5    6    7    8    9   10   11   12   13
+
+TABLE_NAME                     PARTITION_NAME       HIGH_VALUE   PARTITION_POSITION INMEMORY
+------------------------------ -------------------- ---------- -------------------- --------
+EXT_CUST_HYBRID_PART           N1                   'RUSSIA'                      1 ENABLED
+EXT_CUST_HYBRID_PART           N2                   'JAPAN'                       2 DISABLED
+EXT_CUST_HYBRID_PART           N3                   'BULGARIA'                    3 ENABLED
+EXT_CUST_HYBRID_PART           N4                   'NORWAY'                      4 DISABLED
+
+SQL>
+
+
+@imseg
+
+                                                                                                 BYTES NOT
+SEGMENT_NAME         PARTITION_NAME  EXTERNAL            BYTES POP STATUS       INMEMORY_SIZE    POPULATED
+-------------------- --------------- -------- ---------------- ------------- ---------------- ------------
+EXT_CUST_HYBRID_PART N3              FALSE           8,241,152 COMPLETED            1,179,648            0
+EXT_CUST_HYBRID_PART N1              TRUE                    0 COMPLETED            1,179,648            0
+
+
+SQL> @imexthybrid.sql
+SQL> 
+SQL> select nation, count(*) from EXT_CUST_HYBRID_PART group by nation;
+
+NATION                          COUNT(*)
+------------------- --------------------
+RUSSIA                              2463
+JAPAN                               2413
+BULGARIA                            2360
+NORWAY                              2360
+
+Elapsed: 00:00:00.11
+SQL> 
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  9xvzy9nw70fh0, child number 1
+-------------------------------------
+select nation, count(*) from EXT_CUST_HYBRID_PART group by nation
+
+Plan hash value: 3929300810
+
+---------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                                | Name                 | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+---------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                         |                      |       |       |    19 (100)|          |       |       |
+|   1 |  PARTITION LIST ALL                      |                      |     4 |    52 |    19   (6)| 00:00:01 |     1 |     4 |
+|   2 |   HASH GROUP BY                          |                      |     4 |    52 |    19   (6)| 00:00:01 |       |       |
+|   3 |    TABLE ACCESS HYBRID PART INMEMORY FULL| EXT_CUST_HYBRID_PART |  9596 |   121K|    18   (0)| 00:00:01 |     1 |     4 |
+|   4 |     TABLE ACCESS INMEMORY FULL           | EXT_CUST_HYBRID_PART |       |       |            |          |     1 |     4 |
+---------------------------------------------------------------------------------------------------------------------------------
+
+
+16 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                             15
+IM scan CUs columns accessed                                          2
+IM scan CUs memcompress for query low                                 2
+IM scan rows                                                       4823
+IM scan rows projected                                                2
+IM scan segments minmax eligible                                      1
+session logical reads                                              4033
+session logical reads - IM                                         1006
+session pga memory                                             19073272
+table scans (IM)                                                      2
+
+10 rows selected.
+
+SQL> 
