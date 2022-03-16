@@ -59,3 +59,9 @@ imexternal.sql - runs external table query
 imextpart.sql - runs partition external table query
 imexthybrid.sql -runs hybrid external table query
 ```
+
+Ask TOM Office Hours - In-Memory Hybrid Scans - 03/09/2022:
+```
+OH-DBIM-Hybrid-Scans-0309622.pdf - presentation from the session
+OH-DBIM-Hybrid-Scans-demo-030922.txt - example SQL and results
+```
