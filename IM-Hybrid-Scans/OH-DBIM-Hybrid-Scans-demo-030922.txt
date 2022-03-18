@@ -329,3 +329,136 @@ session logical reads                                            454186
 session pga memory                                             20383992
 
 SQL> 
+
+****
+
+Note: Added this next example for completeness. In the Ask TOM session I didn't want to
+wait for another repopulation of the LINEORDER table so we used a NO_INMEMORY hint to 
+demonstrate what would happen if we ran the query with the LO_ORDERDATE column excluded.
+The example below shows this.
+
+
+SQL> alter table lineorder no inmemory;
+
+Table altered.
+
+SQL> alter table lineorder inmemory priority high 
+no inmemory (LO_ORDERPRIORITY,LO_SHIPPRIORITY,LO_EXTENDEDPRICE,LO_ORDTOTALPRICE,
+   LO_DISCOUNT,LO_REVENUE,LO_SUPPLYCOST,LO_TAX,LO_COMMITDATE,LO_ORDERDATE);   2    3  
+
+Table altered.
+
+SQL> select count(*) from lineorder;
+
+  COUNT(*)
+----------
+  59986052
+
+SQL> 
+SQL> @im_populated.sql
+SQL> 
+SQL> -- Query the view v$IM_SEGMENTS to shows what objects are in the column store
+SQL> -- and how much of the objects were populated. When the BYTES_NOT_POPULATED is 0
+SQL> -- it indicates the entire table was populated.
+SQL> 
+SQL> SELECT
+  2    v.owner, v.segment_name name, v.populate_status status, v.bytes,
+  3    v.inmemory_size, v.bytes_not_populated
+  4  FROM   v$im_segments v;
+
+                                                                           In-Memory            Bytes
+OWNER           NAME                 STATUS               Disk Size             Size    Not Populated
+--------------- -------------------- ------------- ---------------- ---------------- ----------------
+SSB             LINEORDER            COMPLETED        3,693,232,128    1,394,606,080                0
+
+SQL> 
+SQL> set echo off
+SQL> @column_level
+SQL> 
+SQL> select owner, table_name, COLUMN_NAME, INMEMORY_COMPRESSION
+  2  from v$im_column_level
+  3  where table_name = 'LINEORDER'
+  4  order by table_name, segment_column_id
+  5  /
+
+OWNER           TABLE_NAME           COLUMN_NAME          INMEMORY_COMPRESSION
+--------------- -------------------- -------------------- --------------------------
+SSB             LINEORDER            LO_ORDERKEY          DEFAULT
+SSB             LINEORDER            LO_LINENUMBER        DEFAULT
+SSB             LINEORDER            LO_CUSTKEY           DEFAULT
+SSB             LINEORDER            LO_PARTKEY           DEFAULT
+SSB             LINEORDER            LO_SUPPKEY           DEFAULT
+SSB             LINEORDER            LO_ORDERDATE         NO INMEMORY
+SSB             LINEORDER            LO_ORDERPRIORITY     NO INMEMORY
+SSB             LINEORDER            LO_SHIPPRIORITY      NO INMEMORY
+SSB             LINEORDER            LO_QUANTITY          DEFAULT
+SSB             LINEORDER            LO_EXTENDEDPRICE     NO INMEMORY
+SSB             LINEORDER            LO_ORDTOTALPRICE     NO INMEMORY
+SSB             LINEORDER            LO_DISCOUNT          NO INMEMORY
+SSB             LINEORDER            LO_REVENUE           NO INMEMORY
+SSB             LINEORDER            LO_SUPPLYCOST        NO INMEMORY
+SSB             LINEORDER            LO_TAX               NO INMEMORY
+SSB             LINEORDER            LO_COMMITDATE        NO INMEMORY
+SSB             LINEORDER            LO_SHIPMODE          DEFAULT
+
+17 rows selected.
+
+SQL> 
+SQL> @hybrid-lo
+SQL> connect ssb/ssb
+Connected.
+SQL> set timing on
+SQL> set numwidth 16
+SQL> set tab off
+SQL> 
+SQL> set echo on
+SQL> 
+SQL> select sum(lo_revenue)
+  2  from lineorder
+  3  where LO_ORDERDATE = '19960102' and lo_quantity > 40 and lo_shipmode = 'AIR';
+
+ SUM(LO_REVENUE)
+----------------
+      4916833732
+
+Elapsed: 00:00:09.29
+SQL> 
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  bt9g60ypk2jpw, child number 0
+-------------------------------------
+select sum(lo_revenue) from lineorder where LO_ORDERDATE = '19960102'
+and lo_quantity > 40 and lo_shipmode = 'AIR'
+
+Plan hash value: 2267213921
+
+--------------------------------------------------------------------------------
+| Id  | Operation          | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+--------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |           |       |       |   123K(100)|          |
+|   1 |  SORT AGGREGATE    |           |     1 |    26 |            |          |
+|*  2 |   TABLE ACCESS FULL| LINEORDER |   712 | 18512 |   123K  (1)| 00:00:05 |
+--------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - filter(("LO_ORDERDATE"=19960102 AND "LO_QUANTITY">40 AND
+              "LO_SHIPMODE"='AIR'))
+
+
+21 rows selected.
+
+
+NAME                                                              VALUE
+-------------------------------------------------- --------------------
+CPU used by this session                                            885
+IM scan segments disk                                                 1
+physical reads                                                   450834
+session logical reads                                            455490
+session pga memory                                             19335416
+
+SQL> 
+
