@@ -65,3 +65,15 @@ Ask TOM Office Hours - In-Memory Hybrid Scans - 03/09/2022:
 OH-DBIM-Hybrid-Scans-0309622.pdf - presentation from the session
 OH-DBIM-Hybrid-Scans-demo-030922.txt - example SQL and results
 ```
+
+Ask TOM Office Hours - SQL Monitor Update - 03/02/2023:
+```
+SQL-Monitor-Updates.pdf - presentation from the session
+01-sqlmon-text.txt - SQL Monitor TEXT report
+02-sqlmon-html.html - SQL Monitor HTML report
+03-sqlmon-active.html - SQL Monitor ACTIVE report
+04-sqlmon-3join-rac.html - A RAC example report
+05-sqlmon-join-groups.html - An example of DBIM Join Groups
+06-sqlmon-2table-hash-deepvect.html - An example of DBIM deep vectorization
+07-sqlmon-Exa-smartscan.html - An example with Exadata SmartScans showing cell offload efficiency
+```
