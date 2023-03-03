@@ -73,6 +73,11 @@ heat-map-segments.sql - display heat map segment access
 heat-map-counts.sql - display heat map access counts
 ```
 
+Ask TOM Office Hours - LiveLabs - 11/01/22
+```
+OH-LiveLabs-110122.pdf - presentation from the session
+```
+
 Ask TOM Office Hours - SQL Monitor Update - 03/02/2023:
 ```
 SQL-Monitor-Updates.pdf - presentation from the session
