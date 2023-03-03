@@ -1,0 +1,60 @@
+SQL Monitoring Report
+
+SQL Text
+------------------------------
+SELECT /*+ MONITOR */ d.d_year, c.c_nation, sum(lo_revenue - lo_supplycost) profit from LINEORDER l, DATE_DIM d, PART p, SUPPLIER s, CUSTOMER C where l.lo_orderdate = d.d_datekey and l.lo_partkey = p.p_partkey and l.lo_suppkey = s.s_suppkey and l.lo_custkey = c.c_custkey and s.s_region = 'AMERICA' and c.c_region = 'AMERICA' group by d.d_year, c.c_nation order by d.d_year, c.c_nation
+
+Global Information
+------------------------------
+ Status              :  DONE (ALL ROWS)
+ Instance ID         :  1
+ Session             :  SSB (19:30268)
+ SQL ID              :  g7dfg8mrw7q3h
+ SQL Execution ID    :  16777218
+ Execution Started   :  02/27/2023 14:24:28
+ First Refresh Time  :  02/27/2023 14:24:28
+ Last Refresh Time   :  02/27/2023 14:28:23
+ Duration            :  235s
+ Module/Action       :  SQL*Plus/-
+ Service             :  dbimpdb
+ Program             :  sqlplus@LL21c.example.com (TNS V1-V3)
+ Fetch Calls         :  3
+
+Global Stats
+=================================================================================
+| Elapsed |   Cpu   |    IO    | Fetch | Buffer | Read  | Read  | Write | Write |
+| Time(s) | Time(s) | Waits(s) | Calls |  Gets  | Reqs  | Bytes | Reqs  | Bytes |
+=================================================================================
+|     240 |      42 |      198 |     3 |     34 | 57335 |   7GB | 57334 |   7GB |
+=================================================================================
+
+SQL Plan Monitoring Details (Plan Hash Value=2543631389)
+===================================================================================================================================================================================================
+| Id |                Operation                 |   Name    |  Rows   | Cost |   Time    | Start  | Execs |   Rows   | Read  | Read  | Write | Write |  Mem  | Temp  | Activity | Activity Detail |
+|    |                                          |           | (Estim) |      | Active(s) | Active |       | (Actual) | Reqs  | Bytes | Reqs  | Bytes | (Max) | (Max) |   (%)    |   (# samples)   |
+===================================================================================================================================================================================================
+|  0 | SELECT STATEMENT                         |           |         |      |         2 |   +234 |     1 |       25 |       |       |       |       |     . |     . |          |                 |
+|  1 |   SORT GROUP BY                          |           |      25 | 4080 |         2 |   +234 |     1 |       25 |       |       |       |       |  4096 |     . |          |                 |
+|  2 |    HASH JOIN                             |           |      25 | 4079 |         2 |   +234 |     1 |       2M |   633 |  74MB |   632 |  74MB | 114MB |  79MB |          |                 |
+|  3 |     JOIN FILTER CREATE                   | :BF0000   |      25 | 4003 |         1 |   +234 |     1 |       2M |       |       |       |       |     . |     . |          |                 |
+|  4 |      HASH JOIN                           |           |      25 | 4003 |        30 |   +205 |     1 |       2M |  2173 | 255MB |  2173 | 255MB |  89MB | 272MB |          |                 |
+|  5 |       JOIN FILTER CREATE                 | :BF0001   |      25 | 3967 |        29 |   +205 |     1 |       9M |       |       |       |       |     . |     . |          |                 |
+|  6 |        HASH JOIN                         |           |      25 | 3967 |       140 |    +94 |     1 |       9M | 12397 |   1GB | 12397 |   1GB |  67MB |   2GB |          |                 |
+|  7 |         JOIN FILTER CREATE               | :BF0002   |      25 | 3964 |       110 |    +94 |     1 |      42M |       |       |       |       |     . |     . |          |                 |
+|  8 |          HASH JOIN                       |           |      25 | 3964 |       176 |    +28 |     1 |      42M | 13775 |   2GB | 13775 |   2GB |  35MB |   2GB |          |                 |
+|  9 |           JOIN FILTER CREATE             | :BF0003   |      25 | 3963 |        67 |    +28 |     1 |      42M |       |       |       |       |     . |     . |          |                 |
+| 10 |            VIEW                          | VW_GBC_28 |      25 | 3963 |        67 |    +28 |     1 |      42M |       |       |       |       |     . |     . |          |                 |
+| 11 |             HASH GROUP BY                |           |      25 | 3963 |        94 |     +1 |     1 |      42M | 28357 |   3GB | 28357 |   3GB | 107MB |   2GB |          |                 |
+| 12 |              PARTITION RANGE ALL         |           |     42M | 3962 |        21 |     +2 |     1 |      42M |       |       |       |       |     . |     . |          |                 |
+| 13 |               TABLE ACCESS INMEMORY FULL | LINEORDER |     42M | 3962 |        21 |     +2 |     5 |      42M |       |       |       |       |     . |     . |          |                 |
+| 14 |           JOIN FILTER USE                | :BF0003   |    2556 |    1 |         1 |    +94 |     1 |     1675 |       |       |       |       |     . |     . |          |                 |
+| 15 |            TABLE ACCESS INMEMORY FULL    | DATE_DIM  |    2556 |    1 |         1 |    +94 |     1 |     1675 |       |       |       |       |     . |     . |          |                 |
+| 16 |         JOIN FILTER USE                  | :BF0002   |    4102 |    3 |         1 |   +205 |     1 |     4102 |       |       |       |       |     . |     . |          |                 |
+| 17 |          TABLE ACCESS INMEMORY FULL      | SUPPLIER  |    4102 |    3 |         3 |   +203 |     1 |     4102 |       |       |       |       |     . |     . |          |                 |
+| 18 |       JOIN FILTER USE                    | :BF0001   |   59761 |   36 |         1 |   +234 |     1 |    58777 |       |       |       |       |     . |     . |          |                 |
+| 19 |        TABLE ACCESS INMEMORY FULL        | CUSTOMER  |   59761 |   36 |         2 |   +233 |     1 |    58777 |       |       |       |       |     . |     . |          |                 |
+| 20 |     JOIN FILTER USE                      | :BF0000   |    800K |   74 |         1 |   +234 |     1 |     600K |       |       |       |       |     . |     . |          |                 |
+| 21 |      TABLE ACCESS INMEMORY FULL          | PART      |    800K |   74 |         1 |   +234 |     1 |     600K |       |       |       |       |     . |     . |          |                 |
+===================================================================================================================================================================================================
+
+
