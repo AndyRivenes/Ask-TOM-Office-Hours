@@ -66,6 +66,13 @@ OH-DBIM-Hybrid-Scans-0309622.pdf - presentation from the session
 OH-DBIM-Hybrid-Scans-demo-030922.txt - example SQL and results
 ```
 
+Ask TOM Office Hours - Heat Map - 06/22/22
+``
+OH-HeatMap-062222.pdf - presentation from the session
+heat-map-segments.sql - display heat map segment access
+heat-map-counts.sql - display heat map access counts
+``
+
 Ask TOM Office Hours - SQL Monitor Update - 03/02/2023:
 ```
 SQL-Monitor-Updates.pdf - presentation from the session
