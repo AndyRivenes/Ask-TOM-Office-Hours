@@ -9,12 +9,14 @@
 --             This script is based on Tom Kyte's runstats utility. It was created for
 --             an AskTOM Office Hours session for Database In-Memory to handle an issue
 --             with v$mystat where 'IM simd' statistics were not being shown. This script
---             was changed to use v$sysstat where those statistics were available. This
+--             was changed to use v$sysstat where those statistics are available. This
 --             is problematic where multiple users are executing and is really only 
 --             suitable for a single active user system. The use of v$latch and v$timer
---             have been removed since usage is expected across database connections. The
---             run_stats global temporary table has also been changed to a regular table
---             to preserve information across database sessions.
+--             from the original runstats utility have been removed since usage of this 
+--             version is really just meant to facilitate seeing system level statistics
+--             that are not available at the session level. The run_stats global temporary
+--             table has also been changed to a regular table to preserve information 
+--             across database sessions.
 --
 --             Everything needed to install and run the utility has been included. Since
 --             this utility needs certain system privileges it is expected that
@@ -45,6 +47,10 @@
 --               to use v$sysstat due to a bug with v$mystat. Does require exclusive
 --               access to work correctly.
 --
+--             1.1,  10/27/2023, A. Rivenes,
+--               Updated help section with corrected package name, separated the output
+--               print into a new rs_output procedure so that the current output can be
+--               re-displayed, added an INMEMORY display option for IM related statistics.
 --
 PROMPT >> This script requires an account to install the RUN_SYSSTATS utility.
 PROMPT >> ;
@@ -151,6 +157,10 @@ AS
     p_difference_threshold IN NUMBER DEFAULT 0,
     p_output               IN VARCHAR2 DEFAULT NULL);
   --
+  PROCEDURE rs_results(
+    p_difference_threshold IN NUMBER DEFAULT 0,
+    p_output               IN VARCHAR2 DEFAULT NULL);
+  --
   PROCEDURE version;
   --
   PROCEDURE help;
@@ -160,7 +170,7 @@ END run_sysstats_pkg;
 CREATE OR REPLACE PACKAGE BODY run_sysstats_pkg
 AS
   g_version_txt   VARCHAR2(60)
-        := 'run_sysstats - Version 1.0, August 18, 2021';
+        := 'run_sysstats - Version 1.1, October 17, 2023';
   --
   -- Procedure to mark the start of the two runs
   --
@@ -195,6 +205,18 @@ AS
     SELECT 'after 2', sysstats.*
     FROM sysstats;
     --
+    -- Call rs_results to display output stats
+    --
+    rs_results(p_difference_threshold, p_output);
+  END rs_stop;
+  --
+  -- Display results
+  --
+  PROCEDURE rs_results(
+    p_difference_threshold IN NUMBER DEFAULT 0,
+    p_output               IN VARCHAR2 DEFAULT NULL)
+  IS
+  BEGIN
     DBMS_OUTPUT.put_line
     ( rpad( 'Name', 50 ) || lpad( 'Run1', 12 ) || 
       lpad( 'Run2', 12 ) || lpad( 'Diff', 12 ) );
@@ -243,6 +265,44 @@ AS
       ) LOOP
         DBMS_OUTPUT.put_line( x.data );
       END LOOP;
+    ELSIF  p_output = 'INMEMORY' THEN
+      FOR x IN 
+      ( SELECT 
+          RPAD( a.name, 50 ) || 
+          TO_CHAR( b.value-a.value, '999,999,999' ) || 
+          TO_CHAR( c.value-b.value, '999,999,999' ) || 
+          TO_CHAR( ( (c.value-b.value)-(b.value-a.value)), '999,999,999' ) data
+        FROM
+          run_sysstats a,
+          run_sysstats b,
+          run_sysstats c
+        WHERE
+           a.name = b.name
+           AND b.name = c.name
+           AND a.runid = 'before'
+           AND b.runid = 'after 1'
+           AND c.runid = 'after 2'
+           AND (
+             (a.name LIKE 'STAT...IM%')
+	           OR (a.name LIKE 'STAT...cell%')
+             OR ( a.name IN (
+                 'STAT...CPU used by this session',
+                 'STAT...physical reads',
+                 'STAT...session logical reads',
+                 'STAT...session logical reads - IM',
+                 'STAT...session pga memory',
+                 'STAT...table scans (IM)',
+                 'STAT...table scan disk IMC fallback'
+               )
+             )
+           )
+           AND ABS( (c.value-b.value) - (b.value-a.value) ) 
+             > p_difference_threshold
+         ORDER BY a.name,
+           ABS( (c.value-b.value)-(b.value-a.value))
+      ) LOOP
+        DBMS_OUTPUT.put_line( x.data );
+      END LOOP;
     ELSE
       -- Assume the default of NULL, all stats will be displayed
       FOR x IN 
@@ -261,22 +321,6 @@ AS
            AND a.runid = 'before'
            AND b.runid = 'after 1'
            AND c.runid = 'after 2'
-           AND (
-             (a.name LIKE 'STAT...IM simd%') 
-             OR ( a.name IN (
-                 'STAT...IM scan rows projected',
-                 'STAT...CPU used by this session',
-                 'STAT...IM scan (dynamic) multi-threaded scans',
-                 'STAT...IM scan (dynamic) rows',
-                 'STAT...physical reads',
-                 'STAT...session logical reads',
-                 'STAT...session logical reads - IM',
-                 'STAT...session pga memory',
-                 'STAT...table scans (IM)',
-                 'STAT...table scan disk IMC fallback'
-               )
-             )
-           )
            AND ABS( (c.value-b.value) - (b.value-a.value) ) 
              > p_difference_threshold
          ORDER BY a.name,
@@ -285,7 +329,7 @@ AS
         DBMS_OUTPUT.put_line( x.data );
       END LOOP;
     END IF;
-  END rs_stop;
+  END rs_results;
   --
   -- Display version
   --
@@ -325,13 +369,14 @@ AS
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'than p_difference_threshold will be displayed.');
     DBMS_OUTPUT.put_line(CHR(9));
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'p_output - Controls stats displayed.');
-    DBMS_OUTPUT.PUT_LINE(CHR(9)||'  Default is NULL, all stats displayed.');
+    DBMS_OUTPUT.PUT_LINE(CHR(9)||'  Default is NULL, all stats displayed (or any unsupported parameter).');
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'  WORKLOAD, only workload related stats are displayed.');
+    DBMS_OUTPUT.PUT_LINE(CHR(9)||'  INMEMORY, Database In-Memory specific stats are displayed.');
     --
     DBMS_OUTPUT.put_line(CHR(9));
     DBMS_OUTPUT.PUT_LINE('Example:');
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'Add the following calls to your test code:');
-    DBMS_OUTPUT.PUT_LINE(CHR(9)||'    exec run_systats_pkg.rs_start;');
+    DBMS_OUTPUT.PUT_LINE(CHR(9)||'    exec run_sysstats_pkg.rs_start;');
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'    exec run_sysstats_pkg.rs_middle;');
     DBMS_OUTPUT.PUT_LINE(CHR(9)||'    exec run_sysstats_pkg.rs_stop;');
     --
@@ -356,5 +401,3 @@ GRANT EXECUTE ON run_sysstats_pkg TO PUBLIC;
 -- 
 --
 EXIT;
-
-
