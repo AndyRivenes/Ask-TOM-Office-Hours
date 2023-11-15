@@ -89,3 +89,9 @@ SQL-Monitor-Updates.pdf - presentation from the session
 06-sqlmon-2table-hash-deepvect.html - An example of DBIM deep vectorization
 07-sqlmon-Exa-smartscan.html - An example with Exadata SmartScans showing cell offload efficiency
 ```
+
+Ask TOM Office Hours - 23c New Features - 11/09/2023:
+```
+OH-23c-New-Features-110923.pdf - Session presentation
+test-sj-dv.txt - Script to show a deep vector join for a semi-join
+```
