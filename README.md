@@ -95,3 +95,10 @@ Ask TOM Office Hours - 23c New Features - 11/09/2023:
 OH-23c-New-Features-110923.pdf - Session presentation
 test-sj-dv.txt - Script to show a deep vector join for a semi-join
 ```
+
+Ask TOM Office Hours - 23c Vector Joins - 01/18/2024:
+```
+OH-23c-Vector-Joins.pdf - Session presentation
+OH-23c-Vector-Join-Examples.txt - Results of running scripts used during the session
+OH-23c-vector-join-file.tar - SQL scripts used in the session to show the different join types
+```
