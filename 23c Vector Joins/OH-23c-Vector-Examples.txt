@@ -1,0 +1,590 @@
+*** LINECUST table definition ***
+
+create table linecust
+as select
+  l.lo_orderkey,
+  l.lo_linenumber,
+  l.lo_custkey,
+  l.lo_orderdate,
+  l.lo_quantity,
+  l.lo_extendedprice,
+  l.lo_supplycost,
+  c.c_nation,
+  c.c_region
+from lineorder l, customer c
+where l.lo_custkey = c.c_custkey
+/
+
+exec dbms_stats.gather_table_stats('SSB','LINECUST');
+alter table linecust inmemory memcompress for capacity high priority high;
+
+*** Demo Output ***
+
+[oracle@localhost InMemory]$ cd OH-23c-vector
+[oracle@localhost OH-23c-vector]$ ls
+01_im_populated.sql  03_sl_dv.sql  05_sj_dv.sql     07_mk_dv.sql  09_mja_dv.sql
+02_im_usage.sql      04_oj_dv.sql  06_sj_stats.sql  08_ml_dv.sql
+[oracle@localhost OH-23c-vector]$ sqlplus ssb/ssb
+
+SQL*Plus: Release 23.0.0.0.0 - Production on Thu Jan 18 00:32:27 2024
+Version 23.3.0.23.09
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+Last Successful login time: Thu Jan 18 2024 00:29:34 +00:00
+
+Connected to:
+Oracle Database 23c Free Release 23.0.0.0.0 - Develop, Learn, and Run for Free
+Version 23.3.0.23.09
+
+SQL> @01_im_populated.sql
+Connected.
+SQL> 
+SQL> -- Query the view v$IM_SEGMENTS to shows what objects are in the column store
+SQL> -- and how much of the objects were populated. When the BYTES_NOT_POPULATED is 0
+SQL> -- it indicates the entire table was populated.
+SQL> 
+SQL> select owner, segment_name, partition_name, populate_status, bytes,
+  2         inmemory_size, bytes_not_populated
+  3  from   v$im_segments
+  4  order by owner, segment_name, partition_name;
+
+                                                                                        In-Memory            Bytes
+OWNER      SEGMENT_NAME         PARTITION_NAME  POPULATE_STATUS        Disk Size             Size    Not Populated
+---------- -------------------- --------------- --------------- ---------------- ---------------- ----------------
+SSB        CUSTOMER                             COMPLETED             24,928,256       28,442,624                0
+SSB        DATE_DIM                             COMPLETED                122,880        1,179,648                0
+SSB        LINECUST                             COMPLETED            725,581,824       93,519,872                0
+SSB        LINEORDER            PART_1995       COMPLETED            563,470,336      214,040,576                0
+SSB        LINEORDER            PART_1996       COMPLETED            565,018,624      214,040,576                0
+SSB        LINEORDER            PART_1997       COMPLETED            563,322,880      212,992,000                0
+SSB        PART                                 COMPLETED             56,893,440       16,973,824                0
+SSB        SUPPLIER                             COMPLETED              1,769,472        2,228,224                0
+
+8 rows selected.
+
+SQL> 
+SQL> set echo off
+SQL> @02_im_usage.sql
+Connected.
+SQL> column pool format a16;
+SQL> column alloc_bytes format 999,999,999,999,999
+SQL> column used_bytes format 999,999,999,999,999
+SQL> 
+SQL> -- Show total column store usage
+SQL> 
+SQL> SELECT pool, alloc_bytes, used_bytes, populate_status, con_id
+  2  FROM   v$inmemory_area;
+
+POOL                      ALLOC_BYTES           USED_BYTES POPULATE_STATUS     CON_ID
+---------------- -------------------- -------------------- --------------- ----------
+1MB POOL                  796,917,760          778,043,392 DONE                     3
+64KB POOL                  25,165,824            5,373,952 DONE                     3
+IM POOL METADATA           16,777,216           16,777,216 DONE                     3
+
+SQL> 
+SQL> set echo off
+SQL> @03_sl_dv.sql
+SQL> 
+SQL> select /*+ MONITOR NO_VECTOR_TRANSFORM */
+  2    d.d_year,
+  3    sum(l.lo_revenue) rev
+  4  from
+  5    lineorder l,
+  6    date_dim d
+  7  where
+  8    l.lo_orderdate = d.d_datekey
+  9    and d.d_year = 1997
+ 10  group by
+ 11    d.d_year;
+
+    D_YEAR        REV
+---------- ----------
+      1997 3.3045E+13
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dc3pmccz543gd, child number 0
+-------------------------------------
+select /*+ MONITOR NO_VECTOR_TRANSFORM */   d.d_year,
+sum(l.lo_revenue) rev from   lineorder l,   date_dim d where
+l.lo_orderdate = d.d_datekey   and d.d_year = 1997 group by   d.d_year
+
+Plan hash value: 4079051772
+
+------------------------------------------------------------------------------------------------------------
+| Id  | Operation                      | Name      | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT               |           |       |       |  2412 (100)|          |       |       |
+|   1 |  SORT GROUP BY NOSORT          |           |  9100K|   225M|  2412  (13)| 00:00:01 |       |       |
+|*  2 |   HASH JOIN                    |           |  9100K|   225M|  2412  (13)| 00:00:01 |       |       |
+|   3 |    JOIN FILTER CREATE          | :BF0001   |   365 |  4380 |     1   (0)| 00:00:01 |       |       |
+|   4 |     PART JOIN FILTER CREATE    | :BF0000   |   365 |  4380 |     1   (0)| 00:00:01 |       |       |
+|*  5 |      TABLE ACCESS INMEMORY FULL| DATE_DIM  |   365 |  4380 |     1   (0)| 00:00:01 |       |       |
+|   6 |    JOIN FILTER USE             | :BF0001   |    27M|   364M|  2352  (11)| 00:00:01 |       |       |
+|   7 |     PARTITION RANGE JOIN-FILTER|           |    27M|   364M|  2352  (11)| 00:00:01 |:BF0000|:BF0000|
+|*  8 |      TABLE ACCESS INMEMORY FULL| LINEORDER |    27M|   364M|  2352  (11)| 00:00:01 |:BF0000|:BF0000|
+------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("L"."LO_ORDERDATE"="D"."D_DATEKEY")
+   5 - inmemory("D"."D_YEAR"=1997)
+       filter("D"."D_YEAR"=1997)
+   8 - inmemory(SYS_OP_BLOOM_FILTER(:BF0001,"L"."LO_ORDERDATE"))
+       filter(SYS_OP_BLOOM_FILTER(:BF0001,"L"."LO_ORDERDATE"))
+
+
+31 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   2 -      deep vector hash joins used: 1, deep vector hash join flags:
+
+SQL> @04_oj_dv.sql
+SQL> 
+SQL> select /*+ MONITOR USE_HASH(p) */ count(*)
+  2  from lineorder l, part p, supplier s
+  3  where l.lo_partkey = p.p_partkey(+)
+  4  and l.lo_suppkey = s.s_suppkey
+  5  and s.s_region = 'AMERICA';
+
+  COUNT(*)
+----------
+   5604603
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  2qtxwhz6drpaq, child number 0
+-------------------------------------
+select /*+ MONITOR USE_HASH(p) */ count(*) from lineorder l, part p,
+supplier s where l.lo_partkey = p.p_partkey(+) and l.lo_suppkey =
+s.s_suppkey and s.s_region = 'AMERICA'
+
+Plan hash value: 3885656753
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                       | Name      | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     | Pstart| Pstop |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                |           |       |       |       | 13697 (100)|          |       |       |
+|   1 |  SORT AGGREGATE                 |           |     1 |    33 |       |            |          |       |       |
+|*  2 |   HASH JOIN RIGHT OUTER         |           |  5568K|   175M|    12M| 13697   (3)| 00:00:01 |       |       |
+|   3 |    TABLE ACCESS INMEMORY FULL   | PART      |   800K|  3906K|       |    73   (3)| 00:00:01 |       |       |
+|*  4 |    HASH JOIN                    |           |  5568K|   148M|       |  2424  (14)| 00:00:01 |       |       |
+|   5 |     JOIN FILTER CREATE          | :BF0000   |  4102 | 73836 |       |     3   (0)| 00:00:01 |       |       |
+|*  6 |      TABLE ACCESS INMEMORY FULL | SUPPLIER  |  4102 | 73836 |       |     3   (0)| 00:00:01 |       |       |
+|   7 |     JOIN FILTER USE             | :BF0000   |    27M|   260M|       |  2361  (11)| 00:00:01 |       |       |
+|   8 |      PARTITION RANGE ALL        |           |    27M|   260M|       |  2361  (11)| 00:00:01 |     1 |     3 |
+|*  9 |       TABLE ACCESS INMEMORY FULL| LINEORDER |    27M|   260M|       |  2361  (11)| 00:00:01 |     1 |     3 |
+---------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("L"."LO_PARTKEY"="P"."P_PARTKEY")
+   4 - access("L"."LO_SUPPKEY"="S"."S_SUPPKEY")
+   6 - inmemory("S"."S_REGION"='AMERICA')
+       filter("S"."S_REGION"='AMERICA')
+   9 - inmemory(SYS_OP_BLOOM_FILTER(:BF0000,"L"."LO_SUPPKEY"))
+       filter(SYS_OP_BLOOM_FILTER(:BF0000,"L"."LO_SUPPKEY"))
+
+
+33 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   2 -      deep vector HJ was NOT leveraged
+   4 -      deep vector hash joins used: 1, deep vector hash join flags: 8704
+
+SQL> @05_sj_dv.sql
+SQL> @../imlogin.sql
+SQL> connect ssb/ssb@freepdb1
+Connected.
+SQL> 
+SQL> set pages 9999
+SQL> set lines 200
+SQL> set tab off
+SQL> set echo on
+SQL> 
+SQL> select /*+ MONITOR */ count(l.lo_custkey)
+  2  from lineorder l
+  3  where l.lo_partkey IN (select p.p_partkey from part p)
+  4  and l.lo_quantity <= 3;
+
+ COUNT(L.LO_CUSTKEY)
+--------------------
+             1640148
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  2392z5krrnszf, child number 0
+-------------------------------------
+select /*+ MONITOR */ count(l.lo_custkey) from lineorder l where
+l.lo_partkey IN (select p.p_partkey from part p) and l.lo_quantity <= 3
+
+Plan hash value: 3734209723
+
+-------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                     | Name      | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     | Pstart| Pstop |
+-------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT              |           |       |       |       |  5113 (100)|          |       |       |
+|   1 |  SORT AGGREGATE               |           |     1 |    18 |       |            |          |       |       |
+|*  2 |   HASH JOIN RIGHT SEMI        |           |  1640K|    28M|    12M|  5113   (8)| 00:00:01 |       |       |
+|   3 |    TABLE ACCESS INMEMORY FULL | PART      |   800K|  3906K|       |    73   (3)| 00:00:01 |       |       |
+|   4 |    PARTITION RANGE ALL        |           |  1640K|    20M|       |  2448  (15)| 00:00:01 |     1 |     3 |
+|*  5 |     TABLE ACCESS INMEMORY FULL| LINEORDER |  1640K|    20M|       |  2448  (15)| 00:00:01 |     1 |     3 |
+-------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("L"."LO_PARTKEY"="P"."P_PARTKEY")
+   5 - inmemory("L"."LO_QUANTITY"<=3)
+       filter("L"."LO_QUANTITY"<=3)
+
+
+25 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   2 -      deep vector hash joins used: 1, deep vector hash join flags: 24576
+
+SQL> set numwidth 20
+SQL> col name format a60;
+SQL> set pages 9999
+SQL> select sn.name, ms.value
+  2  from v$statname sn, v$mystat ms
+  3  where ms.value != 0
+  4    and sn.statistic# = ms.statistic#
+  5    and (
+  6      ( sn.name like 'IM %' )
+  7      or ( sn.name like 'cell%' )
+  8      or ( sn.name like 'HCC %' )
+  9    )
+ 10  order by name;
+
+NAME                                                                        VALUE
+------------------------------------------------------------ --------------------
+IM scan CUs columns accessed                                                  155
+IM scan CUs memcompress for capacity high                                      51
+IM scan CUs memcompress for query low                                           2
+IM scan CUs pcode aggregation pushdown                                         51
+IM scan rows                                                             28125929
+IM scan rows pcode aggregated                                             1640148
+IM scan rows projected                                                         51
+IM scan rows valid                                                       28125929
+IM scan segments minmax eligible                                               51
+
+9 rows selected.
+
+SQL> @06_sj_stats.sql
+SQL> @../imlogin.sql
+SQL> connect ssb/ssb@freepdb1
+Connected.
+SQL> 
+SQL> set pages 9999
+SQL> set lines 200
+SQL> set tab off
+SQL> 
+SQL> set serveroutput on
+SQL> set echo on
+SQL> 
+SQL> alter session set statistics_level = all;
+
+Session altered.
+
+SQL> alter session set inmemory_deep_vectorization = false;
+
+Session altered.
+
+SQL> 
+SQL> exec run_sysstats_pkg.rs_start;
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> select /*+ MONITOR */ count(l.lo_custkey)
+  2  from lineorder l
+  3  where l.lo_partkey IN (select p.p_partkey from part p)
+  4  and l.lo_quantity <= 3;
+
+ COUNT(L.LO_CUSTKEY)
+--------------------
+             1640148
+
+SQL> 
+SQL> exec run_sysstats_pkg.rs_middle;
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> alter session set inmemory_deep_vectorization = true;
+
+Session altered.
+
+SQL> 
+SQL> select /*+ MONITOR */ count(l.lo_custkey)
+  2  from lineorder l
+  3  where l.lo_partkey IN (select p.p_partkey from part p)
+  4  and l.lo_quantity <= 3;
+
+ COUNT(L.LO_CUSTKEY)
+--------------------
+             1640148
+
+SQL> 
+SQL> exec run_sysstats_pkg.rs_stop(p_output => 'INMEMORY');
+Name                                                      Run1        Run2        Diff
+STAT...CPU used by this session                             14           4         -10
+STAT...IM scan rows projected                        2,440,148          51  -2,440,097
+STAT...IM simd KV add calls                                  0         795         795
+STAT...IM simd KV add rows                                   0     800,000     800,000
+STAT...IM simd KV probe calls                                0          51          51
+STAT...IM simd KV probe chain_buckets                        0       7,437       7,437
+STAT...IM simd KV probe keys                                 0   1,640,148   1,640,148
+STAT...IM simd KV probe rows                                 0   1,640,148   1,640,148
+STAT...IM simd KV probe serial_buckets                       0         420         420
+STAT...IM simd decode symbol calls                       3,126           2      -3,124
+STAT...IM simd decode unpack calls                           0           2           2
+STAT...IM simd decode unpack selective calls                 0           2           2
+STAT...IM simd hash calls                                    0          53          53
+STAT...IM simd hash rows                                     0   2,440,148   2,440,148
+STAT...session logical reads                           215,749     213,708      -2,041
+STAT...session pga memory                              655,360           0    -655,360
+
+PL/SQL procedure successfully completed.
+
+SQL> @07_mk_dv.sql
+SQL> 
+SQL> select /*+ MONITOR no_place_group_by */
+  2    c.c_nation, min(l.lo_extendedprice), max(l.lo_extendedprice)
+  3  from linecust l, customer c
+  4  where l.lo_custkey = c.c_custkey
+  5    and l.c_nation = c.c_nation
+  6    and l.c_region = c.c_region
+  7  group by c.c_nation
+  8  fetch first 10 rows only;
+
+C_NATION        MIN(L.LO_EXTENDEDPRICE) MAX(L.LO_EXTENDEDPRICE)
+--------------- ----------------------- -----------------------
+ALGERIA                           90600                10459900
+IRAQ                              90299                10459900
+SAUDI ARABIA                      90798                10479850
+BRAZIL                            90600                10469850
+UNITED STATES                     90599                10484950
+IRAN                              90700                10479900
+KENYA                             90499                10459850
+PERU                              90699                10494950
+INDIA                             90999                10479850
+FRANCE                            90498                10479850
+
+10 rows selected.
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  7ydvq1nrffxc7, child number 0
+-------------------------------------
+select /*+ MONITOR no_place_group_by */   c.c_nation,
+min(l.lo_extendedprice), max(l.lo_extendedprice) from linecust l,
+customer c where l.lo_custkey = c.c_custkey   and l.c_nation =
+c.c_nation   and l.c_region = c.c_region group by c.c_nation fetch
+first 10 rows only
+
+Plan hash value: 1284040955
+
+----------------------------------------------------------------------------------------------------
+| Id  | Operation                       | Name     | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     |
+----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                |          |       |       |       | 24184 (100)|          |
+|*  1 |  VIEW                           |          |    10 |   560 |       | 24184   (1)| 00:00:01 |
+|*  2 |   WINDOW NOSORT STOPKEY         |          |    25 |  1850 |       | 24184   (1)| 00:00:01 |
+|   3 |    HASH GROUP BY                |          |    25 |  1850 |       | 24184   (1)| 00:00:01 |
+|*  4 |     HASH JOIN                   |          |   300K|    21M|    13M| 24178   (1)| 00:00:01 |
+|   5 |      JOIN FILTER CREATE         | :BF0000  |   300K|  9960K|       |    33   (7)| 00:00:01 |
+|   6 |       TABLE ACCESS INMEMORY FULL| CUSTOMER |   300K|  9960K|       |    33   (7)| 00:00:01 |
+|   7 |      JOIN FILTER USE            | :BF0000  |  9126K|   348M|       |  1020  (12)| 00:00:01 |
+|*  8 |       TABLE ACCESS INMEMORY FULL| LINECUST |  9126K|   348M|       |  1020  (12)| 00:00:01 |
+----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter("from$_subquery$_003"."rowlimit_$$_rownumber"<=10)
+   2 - filter(ROW_NUMBER() OVER ( ORDER BY NULL)<=10)
+   4 - access("L"."LO_CUSTKEY"="C"."C_CUSTKEY" AND "L"."C_NATION"="C"."C_NATION" AND
+              "L"."C_REGION"="C"."C_REGION")
+   8 - inmemory(SYS_OP_BLOOM_FILTER(:BF0000,"L"."LO_CUSTKEY"))
+       filter(SYS_OP_BLOOM_FILTER(:BF0000,"L"."LO_CUSTKEY"))
+
+
+34 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   4 -      deep vector hash joins used: 1, deep vector hash join flags: 49152
+
+SQL> 
+SQL> @08_ml_dv.sql
+SQL> 
+SQL> select /*+ MONITOR NO_VECTOR_TRANSFORM */
+  2    sum(l.lo_supplycost)
+  3  from lineorder l, part p, supplier s
+  4  where l.lo_partkey = p.p_partkey
+  5  and l.lo_suppkey = s.s_suppkey;
+
+SUM(L.LO_SUPPLYCOST)
+--------------------
+       2458572438495
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  69fy9twpgxh13, child number 0
+-------------------------------------
+select /*+ MONITOR NO_VECTOR_TRANSFORM */   sum(l.lo_supplycost) from
+lineorder l, part p, supplier s where l.lo_partkey = p.p_partkey and
+l.lo_suppkey = s.s_suppkey
+
+Plan hash value: 3299719042
+
+--------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                      | Name      | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     | Pstart| Pstop |
+--------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT               |           |       |       |       | 38228 (100)|          |       |       |
+|   1 |  SORT AGGREGATE                |           |     1 |    25 |       |            |          |       |       |
+|*  2 |   HASH JOIN                    |           |    27M|   647M|       | 38228   (2)| 00:00:02 |       |       |
+|   3 |    TABLE ACCESS INMEMORY FULL  | SUPPLIER  | 20000 |    97K|       |     3   (0)| 00:00:01 |       |       |
+|*  4 |    HASH JOIN                   |           |    27M|   521M|    12M| 38166   (2)| 00:00:02 |       |       |
+|   5 |     TABLE ACCESS INMEMORY FULL | PART      |   800K|  3906K|       |    73   (3)| 00:00:01 |       |       |
+|   6 |     PARTITION RANGE ALL        |           |    27M|   390M|       |  2455  (15)| 00:00:01 |     1 |     3 |
+|   7 |      TABLE ACCESS INMEMORY FULL| LINEORDER |    27M|   390M|       |  2455  (15)| 00:00:01 |     1 |     3 |
+--------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("L"."LO_SUPPKEY"="S"."S_SUPPKEY")
+   4 - access("L"."LO_PARTKEY"="P"."P_PARTKEY")
+
+
+27 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   2 -      deep vector hash joins used: 1, deep vector hash join flags: 8192
+   4 -      deep vector hash joins used: 1, deep vector hash join flags: 24576
+
+SQL> @09_mja_dv.sql
+SQL> 
+SQL> select /*+ monitor no_vector_transform */
+  2    d_year, c_nation, s_region, lo_shipmode , sum(lo_extendedprice)
+  3  from part p, customer c, lineorder l, supplier s, date_dim d
+  4  where s.s_suppkey = l.lo_suppkey and l.lo_custkey = c.c_custkey and l.lo_partkey = p.p_partkey
+  5  and l.lo_orderdate = d.d_datekey group by d_year, c_nation, s_region, lo_shipmode
+  6  fetch first 10 rows only;
+
+              D_YEAR C_NATION        S_REGION     LO_SHIPMOD SUM(LO_EXTENDEDPRICE)
+-------------------- --------------- ------------ ---------- ---------------------
+                1995 UNITED KINGDOM  EUROPE       AIR                  39004554792
+                1995 IRAQ            AFRICA       FOB                  39223235545
+                1995 IRAQ            MIDDLE EAST  RAIL                 41038681138
+                1995 IRAQ            ASIA         RAIL                 39965303586
+                1995 UNITED KINGDOM  AMERICA      SHIP                 40775703904
+                1995 CHINA           EUROPE       SHIP                 39956538091
+                1995 CHINA           MIDDLE EAST  FOB                  40428235301
+                1995 MOZAMBIQUE      AMERICA      AIR                  41620231638
+                1995 MOZAMBIQUE      ASIA         RAIL                 39049387679
+                1995 EGYPT           EUROPE       MAIL                 38858531232
+
+10 rows selected.
+
+SQL> 
+SQL> select * from table(dbms_xplan.display_cursor(NULL,NULL));
+
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  5gbxnvt2chmb7, child number 0
+-------------------------------------
+select /*+ monitor no_vector_transform */   d_year, c_nation, s_region,
+lo_shipmode , sum(lo_extendedprice) from part p, customer c, lineorder
+l, supplier s, date_dim d where s.s_suppkey = l.lo_suppkey and
+l.lo_custkey = c.c_custkey and l.lo_partkey = p.p_partkey and
+l.lo_orderdate = d.d_datekey group by d_year, c_nation, s_region,
+lo_shipmode fetch first 10 rows only
+
+Plan hash value: 3274347969
+
+------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                          | Name      | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     | Pstart| Pstop |
+------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                   |           |       |       |       |   145K(100)|          |       |       |
+|*  1 |  VIEW                              |           |    10 |   820 |       |   145K  (2)| 00:00:06 |       |       |
+|*  2 |   WINDOW NOSORT STOPKEY            |           |  2166 |   203K|       |   145K  (2)| 00:00:06 |       |       |
+|   3 |    HASH GROUP BY                   |           |  2166 |   203K|       |   145K  (2)| 00:00:06 |       |       |
+|*  4 |     HASH JOIN                      |           |    27M|  2485M|       |   145K  (1)| 00:00:06 |       |       |
+|   5 |      PART JOIN FILTER CREATE       | :BF0000   |  2556 | 30672 |       |     1   (0)| 00:00:01 |       |       |
+|   6 |       TABLE ACCESS INMEMORY FULL   | DATE_DIM  |  2556 | 30672 |       |     1   (0)| 00:00:01 |       |       |
+|*  7 |      HASH JOIN                     |           |    27M|  2175M|       |   145K  (1)| 00:00:06 |       |       |
+|   8 |       TABLE ACCESS INMEMORY FULL   | SUPPLIER  | 20000 |   351K|       |     3   (0)| 00:00:01 |       |       |
+|*  9 |       HASH JOIN                    |           |    27M|  1719M|  9672K|   144K  (1)| 00:00:06 |       |       |
+|  10 |        TABLE ACCESS INMEMORY FULL  | CUSTOMER  |   300K|  6152K|       |    33   (7)| 00:00:01 |       |       |
+|* 11 |        HASH JOIN                   |           |    27M|  1172M|    12M| 70700   (2)| 00:00:03 |       |       |
+|  12 |         TABLE ACCESS INMEMORY FULL | PART      |   800K|  3906K|       |    73   (3)| 00:00:01 |       |       |
+|  13 |         PARTITION RANGE JOIN-FILTER|           |    27M|  1042M|       |  2701  (23)| 00:00:01 |:BF0000|:BF0000|
+|  14 |          TABLE ACCESS INMEMORY FULL| LINEORDER |    27M|  1042M|       |  2701  (23)| 00:00:01 |:BF0000|:BF0000|
+------------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - filter("from$_subquery$_006"."rowlimit_$$_rownumber"<=10)
+   2 - filter(ROW_NUMBER() OVER ( ORDER BY  NULL )<=10)
+   4 - access("L"."LO_ORDERDATE"="D"."D_DATEKEY")
+   7 - access("S"."S_SUPPKEY"="L"."LO_SUPPKEY")
+   9 - access("L"."LO_CUSTKEY"="C"."C_CUSTKEY")
+  11 - access("L"."LO_PARTKEY"="P"."P_PARTKEY")
+
+
+41 rows selected.
+
+SQL> 
+SQL> set echo off
+Deep Vectorization Usage:
+-------------------------
+
+   4 -      deep vector hash joins used: 1, deep vector hash join flags:
+   7 -      deep vector hash joins used: 1, deep vector hash join flags: 8192
+   9 -      deep vector hash joins used: 1, deep vector hash join flags: 8192
+   11 -     deep vector hash joins used: 1, deep vector hash join flags: 24576
+
+SQL> 
