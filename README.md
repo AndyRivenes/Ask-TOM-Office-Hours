@@ -102,3 +102,8 @@ OH-23c-Vector-Joins.pdf - Session presentation
 OH-23c-Vector-Join-Examples.txt - Results of running scripts used during the session
 OH-23c-vector-join-file.tar - SQL scripts used in the session to show the different join types
 ```
+
+Ask TOM Office Hours - Autonomous Database Dedicated - 02/22/2024:
+```
+OH-DBIM-ADB-Dedicated.pdf - Session presentation
+```
